@@ -8,6 +8,7 @@ import morgan from 'morgan';
 import { connect, set, disconnect } from 'mongoose';
 import swaggerJSDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
+import uWS, { TemplatedApp, WebSocket, HttpRequest, HttpResponse } from 'uWebSockets.js';
 import { NODE_ENV, PORT, LOG_FORMAT, ORIGIN, CREDENTIALS } from '@config';
 import { dbConnection } from '@databases';
 import { Routes } from '@interfaces/routes.interface';
@@ -16,13 +17,19 @@ import { logger, stream } from '@utils/logger';
 
 class App {
   public app: express.Application;
+  public uws: TemplatedApp;
   public env: string;
   public port: string | number;
+  public wsPort: number;
 
   constructor(routes: Routes[]) {
     this.app = express();
     this.env = NODE_ENV || 'development';
     this.port = PORT || 3000;
+    this.wsPort = Number(this.port) + 1;
+
+    this.uws = uWS.App();
+    this.initializeWebSocket();
 
     this.connectToDatabase();
     this.initializeMiddlewares();
@@ -38,6 +45,17 @@ class App {
       logger.info(`🚀 App listening on the port ${this.port}`);
       logger.info(`=================================`);
     });
+
+    // Start uWebSockets server
+    this.uws.listen(this.wsPort, token => {
+      if (token) {
+        logger.info(`=================================`);
+        logger.info(`⚡ uWebSockets listening on port ${this.wsPort}`);
+        logger.info(`=================================`);
+      } else {
+        logger.error(`Failed to start uWebSockets on port ${this.wsPort}`);
+      }
+    });
   }
 
   public async closeDatabaseConnection(): Promise<void> {
@@ -51,6 +69,37 @@ class App {
 
   public getServer() {
     return this.app;
+  }
+
+  public getUws() {
+    return this.uws;
+  }
+
+  private initializeWebSocket() {
+    this.uws.ws('/ws', {
+      /* Options */
+      compression: uWS.SHARED_COMPRESSOR,
+      maxPayloadLength: 16 * 1024 * 1024, // 16 MB
+      idleTimeout: 60,
+
+      open: (ws: WebSocket<unknown>) => {
+        logger.info('WebSocket client connected');
+        ws.subscribe('broadcast');
+      },
+
+      message: (ws: WebSocket<unknown>, message: ArrayBuffer, isBinary: boolean) => {
+        // Echo message back; replace with your own logic
+        ws.send(message, isBinary);
+      },
+
+      close: (_ws: WebSocket<unknown>, code: number, _message: ArrayBuffer) => {
+        logger.info(`WebSocket client disconnected [${code}]`);
+      },
+    });
+
+    this.uws.get('/health', (res: HttpResponse, _req: HttpRequest) => {
+      res.end('uWebSockets OK');
+    });
   }
 
   private async connectToDatabase() {
