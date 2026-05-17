@@ -1,32 +1,29 @@
-import { NextFunction, Response } from 'express';
-import { verify } from 'jsonwebtoken';
 import { SECRET_KEY } from '@config';
 import { HttpException } from '@exceptions/HttpException';
-import { DataStoredInToken, RequestWithUser } from '@interfaces/auth.interface';
-import userModel from '@models/users.model';
 
-const authMiddleware = async (req: RequestWithUser, res: Response, next: NextFunction) => {
+import { NextFunction, Request, Response } from 'express';
+import { verify } from 'jsonwebtoken';
+
+declare module 'express' {
+  interface Request {
+    user?: any;
+  }
+}
+
+export const AuthMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const Authorization = req.cookies['Authorization'] || (req.header('Authorization') ? req.header('Authorization').split('Bearer ')[1] : null);
-
-    if (Authorization) {
-      const secretKey: string = SECRET_KEY;
-      const verificationResponse = (await verify(Authorization, secretKey)) as DataStoredInToken;
-      const userId = verificationResponse._id;
-      const findUser = await userModel.findById(userId);
-
-      if (findUser) {
-        req.user = findUser;
-        next();
-      } else {
-        next(new HttpException(401, 'Wrong authentication token'));
-      }
-    } else {
-      next(new HttpException(404, 'Authentication token missing'));
+    const Auth = req.cookies?.Authorization;
+    if (!Auth) {
+      return res.status(401).json({ message: 'Unauthorized' });
     }
+    await verify(Auth, SECRET_KEY, { algorithms: ['HS256'] }, (err, decoded) => {
+      if (err) {
+        return res.status(403).json({ message: 'Auth expire you need to login again', status: 403 });
+      }
+      req.user = decoded as any;
+      next();
+    });
   } catch (error) {
     next(new HttpException(401, 'Wrong authentication token'));
   }
 };
-
-export default authMiddleware;
