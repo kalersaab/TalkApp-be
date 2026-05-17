@@ -4,6 +4,7 @@ import {
   CreateUserDto,
   GetSingleUserParamsDto,
   GetUserQueryDto,
+  LoginUserDto,
   ResendOtpDto,
   UpdateUserDto,
   UpdateUserWithPasswordDto,
@@ -25,7 +26,8 @@ export class UserRoute implements Routes {
   private initializeRoutes() {
     this.router.get(`${this.path}`, AuthMiddleware, ValidationMiddleware(GetUserQueryDto, 'query', true), this.user.getUsers);
     this.router.get(`${this.path}/:id`, AuthMiddleware, ValidationMiddleware(GetSingleUserParamsDto, 'params', true), this.user.getUserById);
-    this.router.post(`${this.path}`, ValidationMiddleware(CreateUserDto, 'body', true), this.user.createUser);
+    this.router.post(`${this.path}/signup`, ValidationMiddleware(CreateUserDto, 'body', true), this.user.createUser);
+        this.router.post(`${this.path}/login`, ValidationMiddleware(LoginUserDto, 'body'), this.user.loginUser);
 
     this.router.post(`${this.path}/verify-email`, ValidationMiddleware(VerifyUserDto, 'body', true), this.user.verifyUser);
     this.router.post(`${this.path}/resend-otp`, ValidationMiddleware(ResendOtpDto, 'body', true), this.user.resendOtp);

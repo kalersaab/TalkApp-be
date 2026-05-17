@@ -59,6 +59,9 @@ export class UserService {
   }
 
   public async createUser(userData: User) {
+    if(!userData){
+      throw new HttpException(400,"empty payload")
+    }
     const { email, password, name } = userData;
     const findUser = await UserModel.findOne({ email: email });
     if (findUser) throw new HttpException(409, `This email ${userData.email} already exists`);

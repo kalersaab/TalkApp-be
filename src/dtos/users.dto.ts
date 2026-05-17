@@ -16,10 +16,6 @@ export class CreateUserDto {
 
   @IsString()
   @IsNotEmpty()
-  public role: string;
-
-  @IsString()
-  @IsNotEmpty()
   @IsOptional()
   public firstName?: string;
 
@@ -27,6 +23,23 @@ export class CreateUserDto {
   @IsNotEmpty()
   @IsOptional()
   public lastName?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  public userName?: string;
+
+}
+
+export class LoginUserDto{
+  @IsEmail()
+  public email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6)
+  @MaxLength(32)
+  public password: string;
 }
 
 export class UpdateUserDto {
