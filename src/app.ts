@@ -1,3 +1,4 @@
+import { join } from 'path';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -136,7 +137,7 @@ class App {
           description: 'Example docs',
         },
       },
-      apis: ['swagger.yaml'],
+      apis: [join(__dirname, '../../swagger.yaml')],
     };
 
     const specs = swaggerJSDoc(options);
