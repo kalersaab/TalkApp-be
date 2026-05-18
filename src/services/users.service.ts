@@ -6,6 +6,7 @@ import { UserModel } from '@models/users.model';
 import { compare, hash } from 'bcrypt';
 import { sign } from 'jsonwebtoken';
 import { OtpModel } from '@/models/otp.model';
+import mongoose from 'mongoose';
 
 export class UserService {
   public async findUserById(userId: any) {
@@ -163,7 +164,23 @@ export class UserService {
     };
     return response;
   }
-
+  public async meApi(userId: string) {
+    if (!userId) {
+      throw new HttpException(400, 'User ID is required');
+    }
+    const objectId = new mongoose.Types.ObjectId(userId);
+    const findUserData = await UserModel.aggregate([
+      { $match: { _id: objectId } },
+      {
+        $project: {
+          password: 0,
+          provider: 0,
+          isVerified: 0,
+        },
+      },
+    ]);
+    return findUserData;
+  }
   public async updateUser(userId: any, userData: any) {
     const findUser = await UserModel.findById(userId);
     if (!findUser) throw new HttpException(409, "User doesn't exist");

@@ -70,6 +70,16 @@ export class UserController {
 
       res.status(200).json({ data: loginUserData, message: 'user logged in successfully' });
     } catch (error) {
+      next(new HttpException(error.status, error.message || 'Something went wrong'));
+    }
+  };
+
+  public getLoginUserData = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = req.user?._id;
+      const userData = await this.user.meApi(user);
+      res.status(200).json({ data: userData[0], message: 'user data fetched successfully' });
+    } catch (error) {
       next(new HttpException(500, error.message || 'Something went wrong'));
     }
   };
