@@ -5,11 +5,13 @@ const userSchema = new Schema(
     userName: {
       type: String,
       unique: true,
+      sparse: true,
       required: false,
     },
     phoneNumber: {
       type: String,
       unique: true,
+      sparse: true,
       required: false,
     },
     firstName: { type: String, required: false },
