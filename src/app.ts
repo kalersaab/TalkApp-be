@@ -115,40 +115,65 @@ class App {
       },
 
       message: (ws: WebSocket<{ userId: string }>, message: ArrayBuffer, isBinary: boolean) => {
-        const content = isBinary
-          ? Buffer.from(message).toString('base64')
-          : Buffer.from(message).toString('utf-8');
-
         const senderId = ws.getUserData().userId;
-        let receiverId: string | null = null;
-        let roomId = 'general';
-        let textContent = content;
-
-        if (!isBinary) {
-          try {
-            const parsed = JSON.parse(content);
-            receiverId = parsed.receiverId ?? null;
-            roomId = parsed.roomId ?? roomId;
-            textContent = parsed.content ?? content;
-          } catch {
-            // plain-text message — keep defaults
-          }
+        if (isBinary) {
+          const content = Buffer.from(message).toString('base64');
+          const roomId = senderId;
+          this.messageService.saveMessage(senderId, roomId, null, content, true).catch(err => {
+            logger.error(`Failed to save binary message: ${err.message}`);
+          });
+          return;
+        }
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(Buffer.from(message).toString('utf-8'));
+        } catch {
+          logger.warn(`Non-JSON text message from ${senderId}, ignoring`);
+          return;
         }
 
-        this.messageService.saveMessage(senderId, roomId, textContent, isBinary).catch(err => {
+        const type = (parsed.type as string) ?? 'message';
+        if (type === 'getHistory') {
+          const peerId = parsed.peerId as string | undefined;
+          const limit = typeof parsed.limit === 'number' ? parsed.limit : 50;
+
+          if (!peerId) {
+            ws.send(JSON.stringify({ type: 'error', message: 'peerId is required for getHistory' }), false);
+            return;
+          }
+          const roomId = [senderId, peerId].sort().join('_');
+          this.messageService.getMessages(roomId, senderId, limit)
+            .then(messages => {
+              ws.send(JSON.stringify({ type: 'history', roomId, messages }), false);
+            })
+            .catch(err => {
+              logger.error(`Failed to fetch history for room ${roomId}: ${err.message}`);
+              ws.send(JSON.stringify({ type: 'error', message: 'Failed to fetch message history' }), false);
+            });
+
+          return;
+        }
+
+        const receiverId = (parsed.receiverId as string) ?? null;
+        const textContent = (parsed.content as string) ?? '';
+         const roomId = receiverId
+          ? [senderId, receiverId].sort().join('_')
+          : senderId;
+
+        this.messageService.saveMessage(senderId, roomId, receiverId, textContent, false).catch(err => {
           logger.error(`Failed to save message to Cassandra: ${err.message}`);
         });
 
-         if (receiverId) {
+        if (receiverId) {
           const recipientWs = this.clients.get(receiverId);
           if (recipientWs) {
-            const payload = JSON.stringify({
+            recipientWs.send(JSON.stringify({
+              type: 'message',
               senderId,
               roomId,
               content: textContent,
               timestamp: new Date().toISOString(),
-            });
-            recipientWs.send(payload, false);
+            }), false);
           } else {
             logger.info(`Recipient ${receiverId} is not connected`);
           }

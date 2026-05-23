@@ -33,6 +33,7 @@ export async function initCassandra(): Promise<void> {
         created_at TIMESTAMP,
         message_id UUID,
         sender_id  TEXT,
+        reciever_id TEXT,
         content    TEXT,
         is_binary  BOOLEAN,
         PRIMARY KEY ((room_id), created_at, message_id)
