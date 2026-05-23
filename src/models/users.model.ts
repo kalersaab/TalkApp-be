@@ -6,6 +6,7 @@ const userSchema = new Schema(
       type: String,
       unique: true,
       sparse: true,
+      trim:true,
       required: false,
     },
     phoneNumber: {
@@ -13,21 +14,25 @@ const userSchema = new Schema(
       unique: true,
       sparse: true,
       required: false,
+      trim:true,
     },
-    firstName: { type: String, required: false },
-    lastName: { type: String, required: false },
-    bio: { type: String },
+    firstName: { type: String, required: false,trim:true },
+    lastName: { type: String, required: false, trim:true },
+    bio: { type: String, trim:true, },
     email: {
       type: String,
       required: true,
       unique: true,
+      trim:true
     },
     password: {
       type: String,
       required: false,
+      trim:true
     },
     name: {
       type: String,
+      trim:true,
       required: false,
     },
     avatar: {
