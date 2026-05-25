@@ -23,18 +23,22 @@
     "paths": {
       "@/*": ["*"],
       "@config": ["config"],
+      "@constants/*": ["constants/*"],
       "@controllers/*": ["controllers/*"],
       "@databases": ["databases"],
+      "@databases/*": ["databases/*"],
       "@dtos/*": ["dtos/*"],
       "@exceptions/*": ["exceptions/*"],
       "@interfaces/*": ["interfaces/*"],
       "@middlewares/*": ["middlewares/*"],
       "@models/*": ["models/*"],
+      "@repositories/*": ["repositories/*"],
       "@routes/*": ["routes/*"],
       "@services/*": ["services/*"],
+      "@sockets/*": ["sockets/*"],
       "@utils/*": ["utils/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.json", ".env"],
+  "include": ["src/**/*.ts", "src/**/*.json"],
   "exclude": ["node_modules", "src/http", "src/logs", "src/tests"]
 }

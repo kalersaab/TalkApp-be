@@ -1,3 +1,4 @@
+import http from 'http';
 import { join } from 'path';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -6,31 +7,32 @@ import express from 'express';
 import helmet from 'helmet';
 import hpp from 'hpp';
 import morgan from 'morgan';
-import { connect, set, disconnect } from 'mongoose';
+import { disconnect } from 'mongoose';
 import swaggerJSDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
-import uWS, { TemplatedApp, WebSocket, HttpRequest, HttpResponse } from 'uWebSockets.js';
+
 import { NODE_ENV, PORT, LOG_FORMAT, ORIGIN, CREDENTIALS } from '@config';
-import { dbConnection } from '@databases';
+import { dbConnect } from '@databases';
+import { cassandraConnect, cassandraDisconnect } from '@databases/cassandra';
+import { redisConnect, redisDisconnect } from '@databases/redis';
 import { Routes } from '@interfaces/routes.interface';
 import errorMiddleware from '@middlewares/error.middleware';
+import { initChatGateway } from '@sockets/chat.gateway';
 import { logger, stream } from '@utils/logger';
 
 class App {
   public app: express.Application;
-  public uws: TemplatedApp;
+  public server: http.Server;
   public env: string;
   public port: string | number;
-  public wsPort: number;
 
   constructor(routes: Routes[]) {
     this.app = express();
-    this.env = NODE_ENV || 'development';
-    this.port = PORT || 3000;
-    this.wsPort = Number(this.port) + 1;
+    this.env  = NODE_ENV || 'development';
+    this.port = PORT || 8000;
 
-    this.uws = uWS.App();
-    this.initializeWebSocket();
+    // Single HTTP server shared by Express + Socket.io
+    this.server = http.createServer(this.app);
 
     this.connectToDatabase();
     this.initializeMiddlewares();
@@ -39,80 +41,47 @@ class App {
     this.initializeErrorHandling();
   }
 
-  public listen() {
-    this.app.listen(this.port, () => {
-      logger.info(`=================================`);
+  public listen(): void {
+    this.server.listen(this.port, () => {
+      logger.info('=================================');
       logger.info(`======= ENV: ${this.env} =======`);
-      logger.info(`🚀 App listening on the port ${this.port}`);
-      logger.info(`=================================`);
-    });
-
-    // Start uWebSockets server
-    this.uws.listen(this.wsPort, token => {
-      if (token) {
-        logger.info(`=================================`);
-        logger.info(`⚡ uWebSockets listening on port ${this.wsPort}`);
-        logger.info(`=================================`);
-      } else {
-        logger.error(`Failed to start uWebSockets on port ${this.wsPort}`);
-      }
+      logger.info(`🚀 App listening on port ${this.port}`);
+      logger.info(`⚡ Socket.io attached to same port`);
+      logger.info('=================================');
     });
   }
 
   public async closeDatabaseConnection(): Promise<void> {
     try {
       await disconnect();
-      console.log('Disconnected from MongoDB');
+      await cassandraDisconnect();
+      await redisDisconnect();
+      logger.info('Disconnected from all databases');
     } catch (error) {
-      console.error('Error closing database connection:', error);
+      logger.error('Error closing database connections:', error);
     }
   }
 
-  public getServer() {
+  public getServer(): express.Application {
     return this.app;
   }
 
-  public getUws() {
-    return this.uws;
+  public getHttpServer(): http.Server {
+    return this.server;
   }
 
-  private initializeWebSocket() {
-    this.uws.ws('/ws', {
-      /* Options */
-      compression: uWS.SHARED_COMPRESSOR,
-      maxPayloadLength: 16 * 1024 * 1024, // 16 MB
-      idleTimeout: 60,
+  private async connectToDatabase(): Promise<void> {
+    await dbConnect();
+    await cassandraConnect();
+    await redisConnect();
 
-      open: (ws: WebSocket<unknown>) => {
-        logger.info('WebSocket client connected');
-        ws.subscribe('broadcast');
-      },
-
-      message: (ws: WebSocket<unknown>, message: ArrayBuffer, isBinary: boolean) => {
-        // Echo message back; replace with your own logic
-        ws.send(message, isBinary);
-      },
-
-      close: (_ws: WebSocket<unknown>, code: number, _message: ArrayBuffer) => {
-        logger.info(`WebSocket client disconnected [${code}]`);
-      },
-    });
-
-    this.uws.get('/health', (res: HttpResponse, _req: HttpRequest) => {
-      res.end('uWebSockets OK');
-    });
+    // Initialise Socket.io gateway after all data stores are ready
+    initChatGateway(this.server);
+    logger.info('[App] ChatGateway initialised');
   }
 
-  private async connectToDatabase() {
-    if (this.env !== 'production') {
-      set('debug', true);
-    }
-
-    await connect(dbConnection.url);
-  }
-
-  private initializeMiddlewares() {
-    this.app.use(morgan(LOG_FORMAT, { stream }));
+  private initializeMiddlewares(): void {
+    this.app.use(morgan(LOG_FORMAT ?? 'dev', { stream }));
     this.app.use(cors({ origin: ORIGIN, credentials: CREDENTIALS }));
     this.app.use(hpp());
     this.app.use(helmet());
@@ -122,29 +91,33 @@ class App {
     this.app.use(cookieParser());
   }
 
-  private initializeRoutes(routes: Routes[]) {
+  private initializeRoutes(routes: Routes[]): void {
     routes.forEach(route => {
       this.app.use('/api', route.router);
     });
+
+    // Health endpoint
+    this.app.get('/health', (_req, res) => {
+      res.json({ status: 'ok', uptime: process.uptime() });
+    });
   }
 
-  private initializeSwagger() {
+  private initializeSwagger(): void {
     const options = {
       swaggerDefinition: {
         info: {
-          title: 'REST API',
+          title: 'TalkApp API',
           version: '1.0.0',
-          description: 'Example docs',
+          description: 'Language learning chat API',
         },
       },
       apis: [join(__dirname, '../../swagger.yaml')],
     };
-
     const specs = swaggerJSDoc(options);
     this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
   }
 
-  private initializeErrorHandling() {
+  private initializeErrorHandling(): void {
     this.app.use(errorMiddleware);
   }
 }
