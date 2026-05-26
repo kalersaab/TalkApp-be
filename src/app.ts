@@ -13,6 +13,7 @@ import uWS, { TemplatedApp, WebSocket, HttpRequest, HttpResponse, us_socket_cont
 import { NODE_ENV, PORT, LOG_FORMAT, ORIGIN, CREDENTIALS } from '@config';
 import { dbConnection } from '@databases';
 import { initCassandra, shutdownCassandra } from '@databases/cassandra';
+import { initRedis, shutdownRedis } from '@databases/redis';
 import { Routes } from '@interfaces/routes.interface';
 import errorMiddleware from '@middlewares/error.middleware';
 import { MessageService } from '@services/message.service';
@@ -38,6 +39,7 @@ class App {
 
     this.connectToDatabase();
     this.connectToCassandra();
+    this.connectToRedis();
     this.initializeMiddlewares();
     this.initializeRoutes(routes);
     this.initializeSwagger();
@@ -77,6 +79,14 @@ class App {
       await shutdownCassandra();
     } catch (error) {
       console.error('Error closing Cassandra connection:', error);
+    }
+  }
+
+  public async closeRedisConnection(): Promise<void> {
+    try {
+      await shutdownRedis();
+    } catch (error) {
+      console.error('Error closing Redis connection:', error);
     }
   }
 
@@ -142,7 +152,7 @@ class App {
             return;
           }
           const roomId = [senderId, peerId].sort().join('_');
-          this.messageService.getMessages(roomId, senderId, limit)
+          this.messageService.getMessages(roomId, limit)
             .then(messages => {
               ws.send(JSON.stringify({ type: 'history', roomId, messages }), false);
             })
@@ -205,6 +215,14 @@ class App {
       await initCassandra();
     } catch (error) {
       logger.error(`Cassandra connection failed: ${error.message}`);
+    }
+  }
+
+  private async connectToRedis() {
+    try {
+      await initRedis();
+    } catch (error) {
+      logger.error(`Redis connection failed: ${error.message}`);
     }
   }
 

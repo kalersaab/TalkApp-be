@@ -4,3 +4,4 @@ config({ path: `.env.${process.env.NODE_ENV || 'development'}.local` });
 export const CREDENTIALS = process.env.CREDENTIALS === 'true';
 export const { NODE_ENV, PORT, DB_HOST, DB_PORT, DB_DATABASE, SECRET_KEY, LOG_FORMAT, LOG_DIR, ORIGIN } = process.env;
 export const { CASSANDRA_CONTACT_POINTS, CASSANDRA_LOCAL_DATA_CENTER, CASSANDRA_KEYSPACE } = process.env;
+export const { REDIS_URL } = process.env;
