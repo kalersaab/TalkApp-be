@@ -27,13 +27,35 @@ services:
       - backend
     links:
       - mongo
+      - redis
+      - cassandra
     depends_on:
       - mongo
+      - redis
+      - cassandra
   mongo:
     image: mvertes/alpine-mongo
     container_name: mongo
     ports:
       - '27017:27017'
+    networks:
+      - backend
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - '6379:6379'
+    restart: 'unless-stopped'
+    networks:
+      - backend
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra
+    ports:
+      - '9042:9042'
+    environment:
+      - CASSANDRA_CLUSTER_NAME=talkapp
+    restart: 'unless-stopped'
     networks:
       - backend
 
