@@ -1,12 +1,7 @@
 import { Client, types, policies, auth, type Host } from 'cassandra-driver';
 import type { QueryOptions } from 'cassandra-driver';
 
-import {
-  CASSANDRA_CONTACT_POINTS,
-  CASSANDRA_LOCAL_DC,
-  CASSANDRA_USER,
-  CASSANDRA_PASSWORD,
-} from '@config';
+import { CASSANDRA_CONTACT_POINTS, CASSANDRA_LOCAL_DC, CASSANDRA_USER, CASSANDRA_PASSWORD } from '@config';
 import { logger } from '@utils/logger';
 import { CassandraError } from '@interfaces/message.interface';
 
@@ -15,7 +10,7 @@ import { CassandraError } from '@interfaces/message.interface';
 export const CQL = {
   CREATE_KEYSPACE: `
     CREATE KEYSPACE IF NOT EXISTS langlearn
-    WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 3}
+    WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
     AND durable_writes = true
   `,
 
@@ -114,35 +109,25 @@ export class CassandraClient {
   // Default query options — prepare:true tells the driver to cache the
   // prepared statement internally on first execution (no manual prepare() needed)
   private static readonly DEFAULT_OPTIONS: QueryOptions = {
-    consistency: types.consistencies.localQuorum,
+    consistency: types.consistencies.localOne,
     prepare: true,
   };
 
   constructor() {
-    const contactPoints = (CASSANDRA_CONTACT_POINTS ?? 'localhost')
-      .split(',')
-      .map(h => h.trim());
+    const contactPoints = CASSANDRA_CONTACT_POINTS.split(',').map(h => h.trim());
 
     const localDc = CASSANDRA_LOCAL_DC ?? 'datacenter1';
 
-    const authProvider =
-      CASSANDRA_USER && CASSANDRA_PASSWORD
-        ? new auth.PlainTextAuthProvider(CASSANDRA_USER, CASSANDRA_PASSWORD)
-        : undefined;
+    const authProvider = CASSANDRA_USER && CASSANDRA_PASSWORD ? new auth.PlainTextAuthProvider(CASSANDRA_USER, CASSANDRA_PASSWORD) : undefined;
 
     this.client = new Client({
       contactPoints,
       localDataCenter: localDc,
 
       policies: {
-        loadBalancing: new policies.loadBalancing.TokenAwarePolicy(
-          new policies.loadBalancing.DCAwareRoundRobinPolicy(localDc),
-        ),
+        loadBalancing: new policies.loadBalancing.TokenAwarePolicy(new policies.loadBalancing.DCAwareRoundRobinPolicy(localDc)),
         retry: new policies.retry.RetryPolicy(),
-        reconnection: new policies.reconnection.ExponentialReconnectionPolicy(
-          CassandraClient.BASE_DELAY_MS,
-          60_000,
-        ),
+        reconnection: new policies.reconnection.ExponentialReconnectionPolicy(CassandraClient.BASE_DELAY_MS, 60_000),
       },
 
       pooling: {
@@ -198,11 +183,7 @@ export class CassandraClient {
    * The driver automatically prepares and caches the statement on first call
    * when prepare:true is set (the default). Subsequent calls reuse the cache.
    */
-  async execute(
-    cql: string,
-    params: unknown[] = [],
-    options: QueryOptions = {},
-  ): Promise<types.ResultSet> {
+  async execute(cql: string, params: unknown[] = [], options: QueryOptions = {}): Promise<types.ResultSet> {
     return this.client.execute(cql, params, {
       ...CassandraClient.DEFAULT_OPTIONS,
       ...options,
@@ -213,10 +194,7 @@ export class CassandraClient {
    * Batch execute — for atomic multi-row writes.
    * Accepts the exact shape the driver expects.
    */
-  async batch(
-    queries: Array<{ query: string; params: unknown[] }>,
-    options: QueryOptions = {},
-  ): Promise<types.ResultSet> {
+  async batch(queries: Array<{ query: string; params: unknown[] }>, options: QueryOptions = {}): Promise<types.ResultSet> {
     // Cast params to the driver's ArrayOrObject type
     const batchQueries = queries.map(q => ({
       query: q.query,

@@ -18,9 +18,9 @@ const postSchema = new Schema<IPost>(
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 
 postSchema.index({ userId: 1 });
-postSchema.index({ createdAt: -1 });                    // global feed pagination
-postSchema.index({ userId: 1, createdAt: -1 });         // user profile feed
-postSchema.index({ likedBy: 1 }, { sparse: true });     // "posts liked by user"
+postSchema.index({ createdAt: -1 }); // global feed pagination
+postSchema.index({ userId: 1, createdAt: -1 }); // user profile feed
+postSchema.index({ likedBy: 1 }, { sparse: true }); // "posts liked by user"
 
 export const PostModel = model<IPost>('Post', postSchema);
 export default PostModel;

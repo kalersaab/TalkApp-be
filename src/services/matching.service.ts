@@ -12,23 +12,25 @@ import { logger } from '@utils/logger';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MATCH_CACHE_TTL   = 5 * 60;          // 5 minutes
-const SUGGEST_CACHE_TTL = 30 * 60;         // 30 minutes
-const CANDIDATE_LIMIT   = 50;
-const RESULT_LIMIT      = 20;
-const TIMEZONE_WINDOW_H = 3;               // ±3 hours UTC offset
+const MATCH_CACHE_TTL = 5 * 60; // 5 minutes
+const SUGGEST_CACHE_TTL = 30 * 60; // 30 minutes
+const CANDIDATE_LIMIT = 50;
+const RESULT_LIMIT = 20;
+const TIMEZONE_WINDOW_H = 3; // ±3 hours UTC offset
 
 const NS = 'talkapp';
-const matchKey     = (userId: string) => `${NS}:match:${userId}`;
-const suggestKey   = (userId: string) => `${NS}:suggest:${userId}`;
+const matchKey = (userId: string) => `${NS}:match:${userId}`;
+const suggestKey = (userId: string) => `${NS}:suggest:${userId}`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Cosine similarity between two equal-length vectors */
 function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0, normA = 0, normB = 0;
+  let dot = 0,
+    normA = 0,
+    normB = 0;
   for (let i = 0; i < a.length; i++) {
-    dot   += a[i]! * b[i]!;
+    dot += a[i]! * b[i]!;
     normA += a[i]! * a[i]!;
     normB += b[i]! * b[i]!;
   }
@@ -44,25 +46,23 @@ function longitudeToUtcOffset(lng: number): number {
 function toPartnerProfile(sc: ScoredCandidate): PartnerProfile {
   const u = sc.user;
   return {
-    _id:          u._id.toString(),
-    displayName:  u.displayName,
-    avatarUrl:    u.avatarUrl,
-    nativeLang:   u.nativeLang,
+    _id: u._id.toString(),
+    displayName: u.displayName,
+    avatarUrl: u.avatarUrl,
+    nativeLang: u.nativeLang,
     learningLangs: u.learningLangs,
-    proficiencyLevels: u.proficiencyLevels
-      ? Object.fromEntries(u.proficiencyLevels.entries())
-      : {},
-    bio:          u.bio,
-    isOnline:     u.isOnline,
-    lastSeen:     u.lastSeen,
+    proficiencyLevels: u.proficiencyLevels ? Object.fromEntries(u.proficiencyLevels.entries()) : {},
+    bio: u.bio,
+    isOnline: u.isOnline,
+    lastSeen: u.lastSeen,
     currentStreak: u.currentStreak,
     collectorRank: u.collectorRank,
     equippedItems: {
-      avatarEffect:   u.equippedItems?.avatarEffect ?? null,
-      chatBubble:     u.equippedItems?.chatBubble ?? null,
+      avatarEffect: u.equippedItems?.avatarEffect ?? null,
+      chatBubble: u.equippedItems?.chatBubble ?? null,
       chatBackground: u.equippedItems?.chatBackground ?? null,
     },
-    score:          sc.score,
+    score: sc.score,
     isMutualFollow: sc.isMutualFollow,
   };
 }
@@ -70,7 +70,6 @@ function toPartnerProfile(sc: ScoredCandidate): PartnerProfile {
 // ─── MatchingService ──────────────────────────────────────────────────────────
 
 export class MatchingService {
-
   // ── buildMongoQuery ──────────────────────────────────────────────────────────
 
   buildMongoQuery(
@@ -81,10 +80,10 @@ export class MatchingService {
   ): Record<string, unknown> {
     const query: Record<string, unknown> = {
       // STEP 1 — core language exchange match
-      _id:          { $ne: new Types.ObjectId(requestingUserId) },
-      isActive:     true,
-      isOnline:     true,
-      nativeLang:   { $in: filters.learningLanguages },
+      _id: { $ne: new Types.ObjectId(requestingUserId) },
+      isActive: true,
+      isOnline: true,
+      nativeLang: { $in: filters.learningLanguages },
       learningLangs: { $in: [filters.nativeLanguage] },
     };
 
@@ -136,16 +135,13 @@ export class MatchingService {
 
   // ── rankCandidates ───────────────────────────────────────────────────────────
 
-  async rankCandidates(
-    candidates: IUser[],
-    requestingUserId: string,
-  ): Promise<ScoredCandidate[]> {
+  async rankCandidates(candidates: IUser[], requestingUserId: string): Promise<ScoredCandidate[]> {
     // Fetch mutual follow set in one query
     const candidateIds = candidates.map(c => c._id);
     const mutualFollows = await FollowModel.find({
-      followerId:  new Types.ObjectId(requestingUserId),
+      followerId: new Types.ObjectId(requestingUserId),
       followingId: { $in: candidateIds },
-      isMutual:    true,
+      isMutual: true,
     }).lean();
     const mutualSet = new Set(mutualFollows.map(f => f.followingId.toString()));
 
@@ -196,11 +192,7 @@ export class MatchingService {
       generatedAt: new Date().toISOString(),
     };
     try {
-      await redis.cacheProfile(
-        matchKey(userId),
-        payload as unknown as Record<string, unknown>,
-        MATCH_CACHE_TTL,
-      );
+      await redis.cacheProfile(matchKey(userId), payload as unknown as Record<string, unknown>, MATCH_CACHE_TTL);
     } catch (err) {
       logger.warn(`[MatchingService] cacheResults failed: ${(err as Error).message}`);
     }
@@ -222,11 +214,7 @@ export class MatchingService {
       generatedAt: new Date().toISOString(),
     };
     try {
-      await redis.cacheProfile(
-        suggestKey(userId),
-        payload as unknown as Record<string, unknown>,
-        SUGGEST_CACHE_TTL,
-      );
+      await redis.cacheProfile(suggestKey(userId), payload as unknown as Record<string, unknown>, SUGGEST_CACHE_TTL);
     } catch (err) {
       logger.warn(`[MatchingService] cacheSuggestions failed: ${(err as Error).message}`);
     }
@@ -246,10 +234,10 @@ export class MatchingService {
   async trackMatchEvent(userId: string, partnerId: string, score = 0): Promise<void> {
     try {
       await MatchEventModel.create({
-        userId:    new Types.ObjectId(userId),
+        userId: new Types.ObjectId(userId),
         partnerId: new Types.ObjectId(partnerId),
         score,
-        source:    'combined',
+        source: 'combined',
       });
     } catch (err) {
       // Analytics failure must never break the main flow
@@ -259,25 +247,15 @@ export class MatchingService {
 
   // ── findPartners — orchestrates all 8 steps ──────────────────────────────────
 
-  async findPartners(
-    requestingUserId: string,
-    filters: MatchFilters,
-  ): Promise<PartnerProfile[]> {
+  async findPartners(requestingUserId: string, filters: MatchFilters): Promise<PartnerProfile[]> {
     // Load requester to get location
-    const requester = await UserModel.findById(requestingUserId)
-      .select('location')
-      .lean<IUser>();
+    const requester = await UserModel.findById(requestingUserId).select('location').lean<IUser>();
 
     const coords = requester?.location?.coordinates ?? null;
     const utcOffset = coords ? longitudeToUtcOffset(coords[0]) : 0;
 
     // STEPS 1–5: build query
-    const mongoQuery = this.buildMongoQuery(
-      requestingUserId,
-      filters,
-      coords,
-      utcOffset,
-    );
+    const mongoQuery = this.buildMongoQuery(requestingUserId, filters, coords, utcOffset);
 
     // STEP 6: execute MongoDB query
     let candidates: IUser[];
@@ -285,7 +263,7 @@ export class MatchingService {
       candidates = await UserModel.find(mongoQuery)
         .select(
           'displayName avatarUrl nativeLang learningLangs proficiencyLevels bio ' +
-          'isOnline lastSeen currentStreak collectorRank equippedItems location gender dateOfBirth',
+            'isOnline lastSeen currentStreak collectorRank equippedItems location gender dateOfBirth',
         )
         .limit(CANDIDATE_LIMIT)
         .lean<IUser[]>();
@@ -304,9 +282,7 @@ export class MatchingService {
 
     // Cache and track (non-blocking)
     void this.cacheResults(requestingUserId, top);
-    void Promise.all(
-      top.map(p => this.trackMatchEvent(requestingUserId, p._id, p.score)),
-    );
+    void Promise.all(top.map(p => this.trackMatchEvent(requestingUserId, p._id, p.score)));
 
     return top;
   }
@@ -345,13 +321,13 @@ export class MatchingService {
     if (!prefs) return [];
 
     const filters: MatchFilters = {
-      genderPreference:  prefs.genderPreference,
+      genderPreference: prefs.genderPreference,
       learningLanguages: prefs.learningLanguages,
-      nativeLanguage:    prefs.nativeLanguage,
-      ageRange:          prefs.ageRange,
-      enableNearby:      prefs.enableNearby,
-      proximityKm:       prefs.proximityKm,
-      proficiencyLevel:  prefs.proficiencyLevel,
+      nativeLanguage: prefs.nativeLanguage,
+      ageRange: prefs.ageRange,
+      enableNearby: prefs.enableNearby,
+      proximityKm: prefs.proximityKm,
+      proficiencyLevel: prefs.proficiencyLevel,
     };
 
     const results = await this.findPartners(userId, filters);

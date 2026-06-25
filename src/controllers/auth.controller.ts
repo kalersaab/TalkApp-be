@@ -1,138 +1,148 @@
 import type { Request, Response, NextFunction } from 'express';
 
-import { RegisterDto, LoginDto, GoogleAuthDto, AppleAuthDto } from '@dtos/auth.dto';
+import { LoginDto, GoogleAuthDto, AppleAuthDto } from '@dtos/auth.dto';
 import type { RequestWithUser } from '@interfaces/auth.interface';
 import { AuthService } from '@services/auth.service';
-import validationMiddleware from '@middlewares/validation.middleware';
 
-const svc = new AuthService();
+export class AuthController {
+  private svc: AuthService;
 
-// ─── POST /api/auth/register ──────────────────────────────────────────────────
-
-export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const dto: RegisterDto = req.body;
-    const result = await svc.register(dto);
-
-    res.cookie(AuthService.cookieName(), result.refreshToken, AuthService.cookieOptions());
-
-    res.status(201).json({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      user: result.user,
-    });
-  } catch (err) {
-    next(err);
+  constructor() {
+    this.svc = new AuthService();
   }
-};
 
-// ─── POST /api/auth/login ─────────────────────────────────────────────────────
-
-export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const dto: LoginDto = req.body;
-    const result = await svc.login(dto);
-
-    res.cookie(AuthService.cookieName(), result.refreshToken, AuthService.cookieOptions());
-
-    res.status(200).json({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      user: result.user,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ─── POST /api/auth/google ────────────────────────────────────────────────────
-
-export const googleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { idToken }: GoogleAuthDto = req.body;
-    const result = await svc.googleAuth(idToken);
-
-    res.cookie(AuthService.cookieName(), result.refreshToken, AuthService.cookieOptions());
-
-    res.status(200).json({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      user: result.user,
-      isNewUser: result.isNewUser,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ─── POST /api/auth/apple ─────────────────────────────────────────────────────
-
-export const appleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { identityToken }: AppleAuthDto = req.body;
-    const result = await svc.appleAuth(identityToken);
-
-    res.cookie(AuthService.cookieName(), result.refreshToken, AuthService.cookieOptions());
-
-    res.status(200).json({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      user: result.user,
-      isNewUser: result.isNewUser,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ─── POST /api/auth/refresh ───────────────────────────────────────────────────
-
-export const refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    // Accept from httpOnly cookie (preferred) or body (mobile fallback)
-    const rawToken: string | undefined =
-      (req.cookies as Record<string, string>)[AuthService.cookieName()] ??
-      (req.body as { refreshToken?: string }).refreshToken;
-
-    if (!rawToken) {
-      res.status(401).json({ message: 'Refresh token missing' });
-      return;
-    }
-
-    const { accessToken, refreshToken } = await svc.refresh(rawToken);
-
-    // Rotate cookie
+  private setRefreshCookie(res: Response, refreshToken: string): void {
     res.cookie(AuthService.cookieName(), refreshToken, AuthService.cookieOptions());
-
-    res.status(200).json({ accessToken, refreshToken });
-  } catch (err) {
-    next(err);
   }
-};
 
-// ─── POST /api/auth/logout ────────────────────────────────────────────────────
+  // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 
-export const logout = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const rawToken: string | undefined =
-      (req.cookies as Record<string, string>)[AuthService.cookieName()] ??
-      (req.body as { refreshToken?: string }).refreshToken;
+  public login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userData: LoginDto = req.body;
+      const result = await this.svc.login(userData);
 
-    if (rawToken) await svc.logout(rawToken);
+      this.setRefreshCookie(res, result.refreshToken);
 
-    res.clearCookie(AuthService.cookieName(), { path: '/api/auth' });
-    res.status(200).json({ success: true });
-  } catch (err) {
-    next(err);
-  }
-};
+      res.status(200).json({
+        success: true,
+        data: {
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          user: result.user,
+        },
+        message: 'user logged in successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
 
-// ─── Legacy class export — keeps existing server.ts import working ────────────
+  // ─── GET /api/auth/me ─────────────────────────────────────────────────────────
 
-class AuthController {
-  public signUp  = register;
-  public logIn   = login;
-  public logOut  = logout;
+  public getMe = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ success: false, message: 'User not authenticated' });
+        return;
+      }
+
+      // const userData = await this.svc.getMe(user);
+      res.status(200).json({
+        success: true,
+        data: user,
+        message: 'user data fetched successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── POST /api/auth/google ────────────────────────────────────────────────────
+
+  public googleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { idToken }: GoogleAuthDto = req.body;
+      const result = await this.svc.googleAuth(idToken);
+
+      this.setRefreshCookie(res, result.refreshToken);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          user: result.user,
+          isNewUser: result.isNewUser,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── POST /api/auth/apple ─────────────────────────────────────────────────────
+
+  public appleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { identityToken }: AppleAuthDto = req.body;
+      const result = await this.svc.appleAuth(identityToken);
+
+      this.setRefreshCookie(res, result.refreshToken);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          user: result.user,
+          isNewUser: result.isNewUser,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── POST /api/auth/refresh ───────────────────────────────────────────────────
+
+  public refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const rawToken: string | undefined =
+        (req.body as { refreshToken?: string }).refreshToken ?? (req.cookies as Record<string, string>)[AuthService.cookieName()];
+
+      if (!rawToken) {
+        res.status(401).json({ success: false, message: 'Refresh token missing' });
+        return;
+      }
+
+      const { accessToken, refreshToken } = await this.svc.refresh(rawToken);
+
+      this.setRefreshCookie(res, refreshToken);
+
+      res.status(200).json({
+        success: true,
+        data: { accessToken, refreshToken },
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── POST /api/auth/logout ────────────────────────────────────────────────────
+
+  public logout = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const rawToken: string | undefined =
+        (req.cookies as Record<string, string>)[AuthService.cookieName()] ?? (req.body as { refreshToken?: string }).refreshToken;
+
+      if (rawToken) await this.svc.logout(rawToken);
+
+      res.clearCookie(AuthService.cookieName(), { path: AuthService.cookieOptions().path });
+      res.status(200).json({ success: true, data: null });
+    } catch (err) {
+      next(err);
+    }
+  };
 }
-
-export default AuthController;

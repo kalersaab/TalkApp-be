@@ -4,12 +4,7 @@ import { EquipItemDto } from '@dtos/showcase.dto';
 import type { Routes } from '@interfaces/routes.interface';
 import { AuthMiddleware } from '@middlewares/auth.middleware';
 import validationMiddleware from '@middlewares/validation.middleware';
-import {
-  getInventory,
-  getCatalogue,
-  getCatalogueItem,
-  equipItem,
-} from '@controllers/showcase.controller';
+import { getInventory, getCatalogue, getCatalogueItem, equipItem } from '@controllers/showcase.controller';
 
 export class ShowcaseRoute implements Routes {
   public path = '/showcase';
@@ -32,10 +27,6 @@ export class ShowcaseRoute implements Routes {
     this.router.get(`${this.path}/catalogue/:itemId`, getCatalogueItem);
 
     // POST /api/showcase/equip
-    this.router.post(
-      `${this.path}/equip`,
-      validationMiddleware(EquipItemDto, 'body'),
-      equipItem,
-    );
+    this.router.post(`${this.path}/equip`, validationMiddleware(EquipItemDto, 'body'), equipItem);
   }
 }

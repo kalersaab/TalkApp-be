@@ -1,17 +1,4 @@
-import {
-  ArrayMaxSize,
-  IsArray,
-  IsIn,
-  IsObject,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-  ValidateIf,
-  IsUrl,
-  IsNotEmpty,
-  IsIn as IsInValidator,
-} from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength, ValidateIf, IsUrl, IsNotEmpty } from 'class-validator';
 
 const PROFICIENCY_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
 const GENDERS = ['male', 'female', 'other'] as const;

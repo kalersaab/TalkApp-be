@@ -93,10 +93,7 @@ export interface PagedMessages {
 // ─── Typed error ──────────────────────────────────────────────────────────────
 
 export class CassandraError extends Error {
-  constructor(
-    public readonly operation: string,
-    public readonly cause: unknown,
-  ) {
+  constructor(public readonly operation: string, public readonly cause: unknown) {
     super(`Cassandra ${operation} failed: ${(cause as Error)?.message ?? String(cause)}`);
     this.name = 'CassandraError';
   }

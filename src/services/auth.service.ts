@@ -1,36 +1,22 @@
-import { hash, compare } from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import jwksClient from 'jwks-rsa';
 import jwt from 'jsonwebtoken';
 
 import { GOOGLE_CLIENT_ID, APPLE_APP_BUNDLE_ID } from '@config';
-import { RegisterDto, LoginDto } from '@dtos/auth.dto';
+
 import { HttpException } from '@exceptions/HttpException';
-import type {
-  AuthResult,
-  OAuthResult,
-  GoogleTokenPayload,
-  AppleTokenPayload,
-} from '@interfaces/auth.interface';
-import type { IUser } from '@interfaces/users.interface';
+import type { AuthResult, OAuthResult, GoogleTokenPayload, AppleTokenPayload } from '@interfaces/auth.interface';
+import type { IUser, LoginUser } from '@interfaces/users.interface';
 import { UserModel } from '@models/users.model';
 import { StreakModel } from '@models/streak.model';
 import { InventoryModel } from '@models/inventory.model';
-import { RefreshTokenModel } from '@models/refreshToken.model';
-import {
-  signAccessToken,
-  generateRefreshToken,
-  hashToken,
-  generateFamily,
-  refreshTokenExpiry,
-} from '@utils/jwt';
+import { signAccessToken, generateRefreshToken, hashToken, generateFamily } from '@utils/jwt';
+
 import { logger } from '@utils/logger';
+import { getRedisService } from '@databases/redis';
+import argon2 from 'argon2';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const BCRYPT_ROUNDS = 12;
-const MAX_FAILED_ATTEMPTS = 10;
-const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 const REFRESH_COOKIE = 'refreshToken';
 const COOKIE_OPTIONS = {
@@ -38,7 +24,7 @@ const COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'strict' as const,
   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in ms
-  path: '/api/auth',
+  path: '/',
 };
 
 // ─── Apple JWKS client ────────────────────────────────────────────────────────
@@ -56,25 +42,6 @@ function sanitizeUser(user: IUser): Omit<IUser, 'passwordHash'> {
   const obj = user.toJSON() as Record<string, unknown>;
   delete obj['passwordHash'];
   return obj as Omit<IUser, 'passwordHash'>;
-}
-
-async function issueTokenPair(
-  userId: string,
-  email: string,
-  family?: string,
-): Promise<{ accessToken: string; refreshToken: string }> {
-  const accessToken = signAccessToken({ userId, email });
-  const rawRefresh = generateRefreshToken();
-  const tokenFamily = family ?? generateFamily();
-
-  await RefreshTokenModel.create({
-    userId,
-    tokenHash: hashToken(rawRefresh),
-    family: tokenFamily,
-    expiresAt: refreshTokenExpiry(),
-  });
-
-  return { accessToken, refreshToken: rawRefresh };
 }
 
 async function createUserDocuments(userId: string): Promise<void> {
@@ -98,90 +65,74 @@ async function createUserDocuments(userId: string): Promise<void> {
 // ─── AuthService ──────────────────────────────────────────────────────────────
 
 export class AuthService {
+  private redis = getRedisService();
+
+  private async issueTokenPair(userId: string, email: string, family?: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const rawRefreshToken = generateRefreshToken();
+    const tokenFamily = family ?? generateFamily();
+
+    const [accessToken, tokenHash] = await Promise.all([
+      Promise.resolve(signAccessToken({ userId, email })),
+      Promise.resolve(hashToken(rawRefreshToken.trim())),
+    ]);
+
+    // Store with already-computed hash
+    await this.redis.setRefreshTokenSession(tokenHash, {
+      userId,
+      family: tokenFamily,
+      used: false,
+    });
+
+    return { accessToken, refreshToken: rawRefreshToken };
+  }
 
   // ── register ────────────────────────────────────────────────────────────────
 
-  async register(dto: RegisterDto): Promise<AuthResult> {
-    const existing = await UserModel.findOne({ email: dto.email.toLowerCase() });
-    if (existing) throw new HttpException(409, 'An account with this email already exists');
-
-    const passwordHash = await hash(dto.password, BCRYPT_ROUNDS);
-
-    const user = await UserModel.create({
-      displayName: dto.displayName,
-      email: dto.email.toLowerCase(),
-      passwordHash,
-      provider: 'local',
-      nativeLang: 'en',
-      isVerified: false,
-      isActive: true,
-    });
-
-    await createUserDocuments(user._id.toString());
-
-    const { accessToken, refreshToken } = await issueTokenPair(
-      user._id.toString(),
-      user.email,
-    );
-
-    logger.info(`[Auth] Registered user ${user._id}`);
-    return { accessToken, refreshToken, user: sanitizeUser(user) };
-  }
-
   // ── login ────────────────────────────────────────────────────────────────────
 
-  async login(dto: LoginDto): Promise<AuthResult> {
-    // Select passwordHash explicitly (it's select:false on the schema)
-    const user = await UserModel.findOne({ email: dto.email.toLowerCase() }).select(
-      '+passwordHash +failedLoginAttempts +lockUntil',
+  public async login(userData: LoginUser): Promise<AuthResult> {
+    const { email, password } = userData;
+    if (!email || !password) throw new HttpException(400, 'Email and password required');
+    const lowerEmail = email.toLowerCase();
+
+    const findUser = await UserModel.findOne({ email: lowerEmail }, { passwordHash: 1, isVerified: 1, isActive: 1, email: 1, displayName: 1 }).select(
+      '+passwordHash',
     );
 
-    if (!user) throw new HttpException(401, 'Invalid email or password');
-    if (!user.isActive) throw new HttpException(403, 'Account is deactivated');
-
-    // ── Brute-force check ────────────────────────────────────────────────────
-    if (user.lockUntil && user.lockUntil > new Date()) {
-      const remaining = Math.ceil((user.lockUntil.getTime() - Date.now()) / 60_000);
-      throw new HttpException(423, `Account locked. Try again in ${remaining} minute(s)`);
+    if (!findUser) {
+      throw new HttpException(404, 'User not found');
     }
 
-    const passwordMatch = await compare(dto.password, user.passwordHash ?? '');
-
-    if (!passwordMatch) {
-      const attempts = (user.failedLoginAttempts ?? 0) + 1;
-      const update: Record<string, unknown> = { failedLoginAttempts: attempts };
-
-      if (attempts >= MAX_FAILED_ATTEMPTS) {
-        update['lockUntil'] = new Date(Date.now() + LOCK_DURATION_MS);
-        update['failedLoginAttempts'] = 0;
-        logger.warn(`[Auth] Account ${user._id} locked after ${attempts} failed attempts`);
-      }
-
-      await UserModel.updateOne({ _id: user._id }, { $set: update });
-      throw new HttpException(401, 'Invalid email or password');
+    if (!findUser.isVerified) {
+      throw new HttpException(400, 'User is not verified. Please verify your email first.');
     }
 
-    // Reset failed attempts on successful login
-    await UserModel.updateOne(
-      { _id: user._id },
-      { $set: { failedLoginAttempts: 0, lockUntil: null } },
-    );
+    if (!findUser.isActive) {
+      throw new HttpException(403, 'User is not active');
+    }
 
-    // Revoke all previous refresh tokens for this user (full rotation)
-    await RefreshTokenModel.deleteMany({ userId: user._id });
+    const isMatch = await argon2.verify(findUser.passwordHash, password);
+    if (!isMatch) {
+      throw new HttpException(401, 'Invalid credentials');
+    }
 
-    const { accessToken, refreshToken } = await issueTokenPair(
-      user._id.toString(),
-      user.email,
-    );
+    const { accessToken, refreshToken } = await this.issueTokenPair(findUser._id.toString(), findUser.email);
 
-    logger.info(`[Auth] Login user ${user._id}`);
-    return { accessToken, refreshToken, user: sanitizeUser(user) };
+    logger.info(`[Auth] User logged in ${findUser._id}`);
+    return { accessToken, refreshToken, user: sanitizeUser(findUser) };
   }
+
+  // ── me ───────────────────────────────────────────────────────────────────────
+
+  //  public async getMe(
+  //   user: Record<string, unknown>,
+  // ): Promise<Record<string, unknown>> {
+  //   return user;
+  // }
 
   // ── google ───────────────────────────────────────────────────────────────────
 
-  async googleAuth(idToken: string): Promise<OAuthResult> {
+  public async googleAuth(idToken: string): Promise<OAuthResult> {
     const clientId = GOOGLE_CLIENT_ID;
     if (!clientId) throw new HttpException(500, 'Google OAuth is not configured');
 
@@ -204,8 +155,15 @@ export class AuthService {
     let isNewUser = false;
 
     if (!user) {
+      const displayName = payload.name ?? payload.email.split('@')[0];
+      const nameParts = displayName.trim().split(' ');
+      const baseUsername = (nameParts.length > 1 ? nameParts[0] : nameParts[0].slice(0, 5)).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const timestamp = Date.now().toString().slice(-4);
+      const username = `ta@${baseUsername}${timestamp}`;
+
       user = await UserModel.create({
-        displayName: payload.name ?? payload.email.split('@')[0],
+        displayName,
+        username,
         email: payload.email.toLowerCase(),
         passwordHash: null,
         avatarUrl: payload.picture ?? null,
@@ -218,12 +176,10 @@ export class AuthService {
       await createUserDocuments(user._id.toString());
       isNewUser = true;
     } else if (!user.googleId) {
-      // Existing local account — link Google
       await UserModel.updateOne({ _id: user._id }, { $set: { googleId: payload.sub } });
     }
 
-    await RefreshTokenModel.deleteMany({ userId: user._id });
-    const { accessToken, refreshToken } = await issueTokenPair(user._id.toString(), user.email);
+    const { accessToken, refreshToken } = await this.issueTokenPair(user._id.toString(), user.email);
 
     logger.info(`[Auth] Google auth user ${user._id} (new=${isNewUser})`);
     return { accessToken, refreshToken, user: sanitizeUser(user), isNewUser };
@@ -231,18 +187,16 @@ export class AuthService {
 
   // ── apple ────────────────────────────────────────────────────────────────────
 
-  async appleAuth(identityToken: string): Promise<OAuthResult> {
+  public async appleAuth(identityToken: string): Promise<OAuthResult> {
     let payload: AppleTokenPayload;
 
     try {
-      // Decode header to get kid
       const decoded = jwt.decode(identityToken, { complete: true });
       if (!decoded || typeof decoded === 'string') throw new Error('Malformed token');
 
       const kid = (decoded.header as { kid?: string }).kid;
       if (!kid) throw new Error('Missing kid in token header');
 
-      // Fetch Apple public key
       const key = await appleJwks.getSigningKey(kid);
       const publicKey = key.getPublicKey();
 
@@ -264,19 +218,26 @@ export class AuthService {
     let isNewUser = false;
 
     if (!user) {
-      // Apple only sends email on first sign-in — use sub as fallback email key
       const email = payload.email?.toLowerCase() ?? `apple.${payload.sub}@privaterelay.appleid.com`;
+      const displayName = email.split('@')[0];
+      const nameParts = displayName.trim().split(' ');
+      const baseUsername = (nameParts.length > 1 ? nameParts[0] : nameParts[0].slice(0, 5)).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const timestamp = Date.now().toString().slice(-4);
+      const username = `ta@${baseUsername}${timestamp}`;
 
-      user = await UserModel.findOne({ email }) ?? await UserModel.create({
-        displayName: email.split('@')[0],
-        email,
-        passwordHash: null,
-        provider: 'google', // reuse provider field; 'apple' can be added to enum
-        appleId: payload.sub,
-        isVerified: payload.email_verified ?? false,
-        isActive: true,
-        nativeLang: 'en',
-      });
+      user =
+        (await UserModel.findOne({ email })) ??
+        (await UserModel.create({
+          displayName,
+          username,
+          email,
+          passwordHash: null,
+          provider: 'apple',
+          appleId: payload.sub,
+          isVerified: payload.email_verified ?? false,
+          isActive: true,
+          nativeLang: 'en',
+        }));
 
       if (!user.appleId) {
         await UserModel.updateOne({ _id: user._id }, { $set: { appleId: payload.sub } });
@@ -286,8 +247,7 @@ export class AuthService {
       isNewUser = true;
     }
 
-    await RefreshTokenModel.deleteMany({ userId: user._id });
-    const { accessToken, refreshToken } = await issueTokenPair(user._id.toString(), user.email);
+    const { accessToken, refreshToken } = await this.issueTokenPair(user._id.toString(), user.email);
 
     logger.info(`[Auth] Apple auth user ${user._id} (new=${isNewUser})`);
     return { accessToken, refreshToken, user: sanitizeUser(user), isNewUser };
@@ -295,46 +255,39 @@ export class AuthService {
 
   // ── refresh ──────────────────────────────────────────────────────────────────
 
-  async refresh(rawToken: string): Promise<{ accessToken: string; refreshToken: string }> {
-    const tokenHash = hashToken(rawToken);
+  public async refresh(rawToken: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+  }> {
+    const tokenHash = hashToken(rawToken.trim());
 
-    const stored = await RefreshTokenModel.findOne({ tokenHash });
+    // Atomic operation:
+    // First request gets the token.
+    // Second request gets null.
+    const session = await this.redis.consumeRefreshTokenSession(tokenHash);
 
-    if (!stored) throw new HttpException(401, 'Invalid or revoked refresh token');
-    if (stored.expiresAt < new Date()) {
-      await RefreshTokenModel.deleteOne({ _id: stored._id });
-      throw new HttpException(401, 'Refresh token expired');
+    if (!session) {
+      throw new HttpException(401, 'Invalid or already used refresh token');
     }
 
-    // Reuse detection — if this family already has a newer token, someone
-    // is replaying a stolen token. Invalidate the entire family.
-    const familyCount = await RefreshTokenModel.countDocuments({ family: stored.family });
-    if (familyCount > 1) {
-      await RefreshTokenModel.deleteMany({ family: stored.family });
-      logger.warn(`[Auth] Refresh token reuse detected for user ${stored.userId}. Family revoked.`);
-      throw new HttpException(401, 'Refresh token reuse detected — please log in again');
+    if (session.isCompromised) {
+      throw new HttpException(401, 'Security warning: Session compromise detected.');
     }
 
-    const user = await UserModel.findById(stored.userId);
-    if (!user || !user.isActive) throw new HttpException(401, 'User not found or inactive');
+    const user = await UserModel.findById(session.userId).lean();
 
-    // Rotate: delete old, issue new in same family
-    await RefreshTokenModel.deleteOne({ _id: stored._id });
-    const { accessToken, refreshToken } = await issueTokenPair(
-      user._id.toString(),
-      user.email,
-      stored.family, // keep same family for reuse detection
-    );
+    if (!user || !user.isActive) {
+      throw new HttpException(401, 'Account is disabled or missing');
+    }
 
-    logger.info(`[Auth] Rotated refresh token for user ${user._id}`);
-    return { accessToken, refreshToken };
+    return this.issueTokenPair(user._id.toString(), user.email, session.family);
   }
 
   // ── logout ───────────────────────────────────────────────────────────────────
 
-  async logout(rawToken: string): Promise<void> {
-    const tokenHash = hashToken(rawToken);
-    await RefreshTokenModel.deleteOne({ tokenHash });
+  public async logout(rawToken: string): Promise<void> {
+    const tokenHash = hashToken(rawToken.trim());
+    await this.redis.invalidateRefreshTokenSession(tokenHash);
   }
 
   // ── cookie helpers (used by controller) ──────────────────────────────────────

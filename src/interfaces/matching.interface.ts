@@ -4,12 +4,12 @@ import type { IUser } from './users.interface';
 
 export interface MatchFilters {
   genderPreference: 'male' | 'female' | 'any';
-  learningLanguages: string[];   // languages the requester wants to learn
-  nativeLanguage: string;        // requester's native language
+  learningLanguages: string[]; // languages the requester wants to learn
+  nativeLanguage: string; // requester's native language
   ageRange: { min: number; max: number };
   enableNearby: boolean;
   proximityKm: number;
-  proficiencyLevel: string;      // 'any' | 'beginner' | 'intermediate' | 'advanced'
+  proficiencyLevel: string; // 'any' | 'beginner' | 'intermediate' | 'advanced'
 }
 
 // ─── Candidate with score ─────────────────────────────────────────────────────

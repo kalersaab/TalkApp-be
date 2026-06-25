@@ -77,7 +77,6 @@ function toBasicUserDTO(user: IUser): BasicUserDTO {
 // ─── ProfileService ───────────────────────────────────────────────────────────
 
 export class ProfileService {
-
   // ── getProfile ───────────────────────────────────────────────────────────────
 
   async getProfile(targetUserId: string, requesterId: string): Promise<ProfileDTO> {
@@ -117,9 +116,7 @@ export class ProfileService {
       bio: user.bio,
       nativeLang: user.nativeLang,
       learningLangs: user.learningLangs,
-      proficiencyLevels: user.proficiencyLevels
-        ? Object.fromEntries(user.proficiencyLevels.entries())
-        : {},
+      proficiencyLevels: user.proficiencyLevels ? Object.fromEntries(user.proficiencyLevels.entries()) : {},
       gender: user.gender,
       joinedAt: user.joinedAt,
       daysJoined: user.daysJoined,
@@ -144,9 +141,7 @@ export class ProfileService {
 
     // Cache without isFollowing (requester-specific)
     const cacheable = { ...dto, isFollowing: false };
-    redis
-      .cacheProfile(cacheKey, cacheable as unknown as Record<string, unknown>, PROFILE_TTL)
-      .catch(() => null);
+    redis.cacheProfile(cacheKey, cacheable as unknown as Record<string, unknown>, PROFILE_TTL).catch(() => null);
 
     dto.isFollowing = isFollowing;
     return dto;
@@ -169,9 +164,9 @@ export class ProfileService {
     const allowedFields: Record<string, unknown> = {};
 
     if (updates.displayName !== undefined) allowedFields['displayName'] = updates.displayName;
-    if (updates.bio !== undefined)         allowedFields['bio'] = updates.bio;
-    if (updates.nativeLang !== undefined)  allowedFields['nativeLang'] = updates.nativeLang;
-    if (updates.gender !== undefined)      allowedFields['gender'] = updates.gender;
+    if (updates.bio !== undefined) allowedFields['bio'] = updates.bio;
+    if (updates.nativeLang !== undefined) allowedFields['nativeLang'] = updates.nativeLang;
+    if (updates.gender !== undefined) allowedFields['gender'] = updates.gender;
     if (updates.dateOfBirth !== undefined) allowedFields['dateOfBirth'] = updates.dateOfBirth;
 
     if (updates.learningLangs !== undefined) {
@@ -188,7 +183,9 @@ export class ProfileService {
     await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: allowedFields });
 
     // Bust cache
-    await getRedisService().invalidateProfile(profileCacheKey(userId)).catch(() => null);
+    await getRedisService()
+      .invalidateProfile(profileCacheKey(userId))
+      .catch(() => null);
 
     return this.getProfile(userId, userId);
   }
@@ -202,7 +199,9 @@ export class ProfileService {
     const url = await uploadToS3(key, fileBuffer, mimeType);
 
     await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { avatarUrl: url } });
-    await getRedisService().invalidateProfile(profileCacheKey(userId)).catch(() => null);
+    await getRedisService()
+      .invalidateProfile(profileCacheKey(userId))
+      .catch(() => null);
 
     logger.info(`[ProfileService] avatar updated for ${userId}`);
     return url;
@@ -210,12 +209,7 @@ export class ProfileService {
 
   // ── getProfilePosts ──────────────────────────────────────────────────────────
 
-  async getProfilePosts(
-    targetUserId: string,
-    requesterId: string,
-    limit = 20,
-    lastPostId?: string,
-  ): Promise<PagedPosts> {
+  async getProfilePosts(targetUserId: string, requesterId: string, limit = 20, lastPostId?: string): Promise<PagedPosts> {
     const query: Record<string, unknown> = {
       userId: new Types.ObjectId(targetUserId),
     };
@@ -223,10 +217,7 @@ export class ProfileService {
       query['_id'] = { $lt: new Types.ObjectId(lastPostId) };
     }
 
-    const posts = await PostModel.find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean<IPost[]>();
+    const posts = await PostModel.find(query).sort({ createdAt: -1 }).limit(limit).lean<IPost[]>();
 
     return {
       posts: posts.map(p => toPostDTO(p, requesterId)),
@@ -236,11 +227,7 @@ export class ProfileService {
 
   // ── getFollowers ─────────────────────────────────────────────────────────────
 
-  async getFollowers(
-    targetUserId: string,
-    limit = 20,
-    lastUserId?: string,
-  ): Promise<PagedUsers> {
+  async getFollowers(targetUserId: string, limit = 20, lastUserId?: string): Promise<PagedUsers> {
     const query: Record<string, unknown> = {
       followingId: new Types.ObjectId(targetUserId),
     };
@@ -248,10 +235,7 @@ export class ProfileService {
       query['followerId'] = { $lt: new Types.ObjectId(lastUserId) };
     }
 
-    const follows = await FollowModel.find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean<IFollow[]>();
+    const follows = await FollowModel.find(query).sort({ createdAt: -1 }).limit(limit).lean<IFollow[]>();
 
     const followerIds = follows.map(f => f.followerId);
     const users = await UserModel.find({ _id: { $in: followerIds } })
@@ -259,25 +243,17 @@ export class ProfileService {
       .lean<IUser[]>();
 
     const userMap = new Map(users.map(u => [u._id.toString(), u]));
-    const ordered = followerIds
-      .map(id => userMap.get(id.toString()))
-      .filter((u): u is IUser => u !== undefined);
+    const ordered = followerIds.map(id => userMap.get(id.toString())).filter((u): u is IUser => u !== undefined);
 
     return {
       users: ordered.map(toBasicUserDTO),
-      nextCursor: follows.length === limit
-        ? follows[follows.length - 1].followerId.toString()
-        : null,
+      nextCursor: follows.length === limit ? follows[follows.length - 1].followerId.toString() : null,
     };
   }
 
   // ── getFollowing ─────────────────────────────────────────────────────────────
 
-  async getFollowing(
-    targetUserId: string,
-    limit = 20,
-    lastUserId?: string,
-  ): Promise<PagedUsers> {
+  async getFollowing(targetUserId: string, limit = 20, lastUserId?: string): Promise<PagedUsers> {
     const query: Record<string, unknown> = {
       followerId: new Types.ObjectId(targetUserId),
     };
@@ -285,10 +261,7 @@ export class ProfileService {
       query['followingId'] = { $lt: new Types.ObjectId(lastUserId) };
     }
 
-    const follows = await FollowModel.find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean<IFollow[]>();
+    const follows = await FollowModel.find(query).sort({ createdAt: -1 }).limit(limit).lean<IFollow[]>();
 
     const followingIds = follows.map(f => f.followingId);
     const users = await UserModel.find({ _id: { $in: followingIds } })
@@ -296,15 +269,11 @@ export class ProfileService {
       .lean<IUser[]>();
 
     const userMap = new Map(users.map(u => [u._id.toString(), u]));
-    const ordered = followingIds
-      .map(id => userMap.get(id.toString()))
-      .filter((u): u is IUser => u !== undefined);
+    const ordered = followingIds.map(id => userMap.get(id.toString())).filter((u): u is IUser => u !== undefined);
 
     return {
       users: ordered.map(toBasicUserDTO),
-      nextCursor: follows.length === limit
-        ? follows[follows.length - 1].followingId.toString()
-        : null,
+      nextCursor: follows.length === limit ? follows[follows.length - 1].followingId.toString() : null,
     };
   }
 
@@ -322,16 +291,11 @@ export class ProfileService {
       query['_id'] = { $lt: new Types.ObjectId(lastAchievementId) };
     }
 
-    const achievements = await AchievementModel.find(query)
-      .sort({ earnedAt: -1 })
-      .limit(limit)
-      .lean<IAchievement[]>();
+    const achievements = await AchievementModel.find(query).sort({ earnedAt: -1 }).limit(limit).lean<IAchievement[]>();
 
     return {
       achievements: achievements.map(toAchievementDTO),
-      nextCursor: achievements.length === limit
-        ? achievements[achievements.length - 1]._id.toString()
-        : null,
+      nextCursor: achievements.length === limit ? achievements[achievements.length - 1]._id.toString() : null,
     };
   }
 
@@ -376,14 +340,8 @@ export class ProfileService {
 
     // Update denormalised counts atomically
     await Promise.all([
-      UserModel.updateOne(
-        { _id: new Types.ObjectId(followerId) },
-        { $inc: { followingCount: 1 } },
-      ),
-      UserModel.updateOne(
-        { _id: new Types.ObjectId(followingId) },
-        { $inc: { followersCount: 1 } },
-      ),
+      UserModel.updateOne({ _id: new Types.ObjectId(followerId) }, { $inc: { followingCount: 1 } }),
+      UserModel.updateOne({ _id: new Types.ObjectId(followingId) }, { $inc: { followersCount: 1 } }),
     ]);
 
     // Bust both profile caches
@@ -421,14 +379,8 @@ export class ProfileService {
 
     // Update denormalised counts
     await Promise.all([
-      UserModel.updateOne(
-        { _id: new Types.ObjectId(followerId) },
-        { $inc: { followingCount: -1 } },
-      ),
-      UserModel.updateOne(
-        { _id: new Types.ObjectId(followingId) },
-        { $inc: { followersCount: -1 } },
-      ),
+      UserModel.updateOne({ _id: new Types.ObjectId(followerId) }, { $inc: { followingCount: -1 } }),
+      UserModel.updateOne({ _id: new Types.ObjectId(followingId) }, { $inc: { followersCount: -1 } }),
     ]);
 
     const redis = getRedisService();

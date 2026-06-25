@@ -10,10 +10,10 @@ export interface IMatchEvent extends Document {
 
 const matchEventSchema = new Schema<IMatchEvent>(
   {
-    userId:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     partnerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    score:     { type: Number, default: 0 },
-    source:    { type: String, enum: ['geo', 'language', 'vector', 'combined'], default: 'combined' },
+    score: { type: Number, default: 0 },
+    source: { type: String, enum: ['geo', 'language', 'vector', 'combined'], default: 'combined' },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

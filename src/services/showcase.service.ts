@@ -5,28 +5,21 @@ import { UserModel } from '@models/users.model';
 import { getRedisService } from '@databases/redis';
 import { HttpException } from '@exceptions/HttpException';
 import { ITEMS_CATALOGUE, CATALOGUE_MAP, DEFAULT_ITEM_IDS } from '@constants/itemsCatalogue';
-import type {
-  InventoryResponse,
-  OwnedItem,
-  CatalogueItemWithOwnership,
-  EquipResult,
-  SenderEquipped,
-} from '@interfaces/showcase.interface';
+import type { InventoryResponse, OwnedItem, CatalogueItemWithOwnership, EquipResult, SenderEquipped } from '@interfaces/showcase.interface';
 import type { IInventory, ItemType } from '@interfaces/users.interface';
 import { logger } from '@utils/logger';
 
 // ─── Cache keys ───────────────────────────────────────────────────────────────
 
-const INVENTORY_TTL  = 10 * 60;   // 10 minutes
-const CATALOGUE_TTL  = 60 * 60;   // 1 hour
-const CATALOGUE_KEY  = 'talkapp:showcase:catalogue';
-const inventoryKey   = (userId: string) => `talkapp:showcase:inventory:${userId}`;
-const profileKey     = (userId: string) => `profile:full:${userId}`;
+const INVENTORY_TTL = 10 * 60; // 10 minutes
+const CATALOGUE_TTL = 60 * 60; // 1 hour
+const CATALOGUE_KEY = 'talkapp:showcase:catalogue';
+const inventoryKey = (userId: string) => `talkapp:showcase:inventory:${userId}`;
+const profileKey = (userId: string) => `profile:full:${userId}`;
 
 // ─── ShowcaseService ──────────────────────────────────────────────────────────
 
 export class ShowcaseService {
-
   // ── getInventory ─────────────────────────────────────────────────────────────
 
   async getInventory(userId: string): Promise<InventoryResponse> {
@@ -37,7 +30,9 @@ export class ShowcaseService {
     try {
       const cached = await redis.getTranslation(cacheKey);
       if (cached) return JSON.parse(cached) as InventoryResponse;
-    } catch { /* cache miss */ }
+    } catch {
+      /* cache miss */
+    }
 
     // MongoDB fallback
     const inv = await InventoryModel.findOne({ userId: new Types.ObjectId(userId) }).lean<IInventory>();
@@ -48,14 +43,12 @@ export class ShowcaseService {
 
     const allOwned: OwnedItem[] = [
       // Default items (no unlockedAt)
-      ...ITEMS_CATALOGUE
-        .filter(c => c.unlockedByAchievement === null)
-        .map(c => ({
-          itemId: c.id,
-          itemType: c.type,
-          unlockedAt: new Date(0),
-          catalogueDetails: c,
-        })),
+      ...ITEMS_CATALOGUE.filter(c => c.unlockedByAchievement === null).map(c => ({
+        itemId: c.id,
+        itemType: c.type,
+        unlockedAt: new Date(0),
+        catalogueDetails: c,
+      })),
       // Earned items
       ...(inv?.items ?? [])
         .filter(i => !DEFAULT_ITEM_IDS.has(i.itemId))
@@ -68,12 +61,12 @@ export class ShowcaseService {
     ];
 
     const response: InventoryResponse = {
-      avatarEffects:    allOwned.filter(i => i.itemType === 'avatarEffect'),
-      chatBubbles:      allOwned.filter(i => i.itemType === 'chatBubble'),
-      chatBackgrounds:  allOwned.filter(i => i.itemType === 'chatBackground'),
+      avatarEffects: allOwned.filter(i => i.itemType === 'avatarEffect'),
+      chatBubbles: allOwned.filter(i => i.itemType === 'chatBubble'),
+      chatBackgrounds: allOwned.filter(i => i.itemType === 'chatBackground'),
       equippedItems: {
-        avatarEffectId:   inv?.equippedItems.avatarEffectId ?? null,
-        chatBubbleId:     inv?.equippedItems.chatBubbleId ?? null,
+        avatarEffectId: inv?.equippedItems.avatarEffectId ?? null,
+        chatBubbleId: inv?.equippedItems.chatBubbleId ?? null,
         chatBackgroundId: inv?.equippedItems.chatBackgroundId ?? null,
       },
     };
@@ -97,17 +90,16 @@ export class ShowcaseService {
       else {
         await redis.cacheTranslation(CATALOGUE_KEY, JSON.stringify(ITEMS_CATALOGUE), CATALOGUE_TTL);
       }
-    } catch { /* use in-memory constant */ }
+    } catch {
+      /* use in-memory constant */
+    }
 
     // Get user's owned item IDs
     const inv = await InventoryModel.findOne({ userId: new Types.ObjectId(userId) })
       .select('items')
       .lean<Pick<IInventory, 'items'>>();
 
-    const ownedIds = new Set([
-      ...DEFAULT_ITEM_IDS,
-      ...(inv?.items.map(i => i.itemId) ?? []),
-    ]);
+    const ownedIds = new Set([...DEFAULT_ITEM_IDS, ...(inv?.items.map(i => i.itemId) ?? [])]);
 
     return catalogueBase.map(item => ({
       ...item,
@@ -126,10 +118,7 @@ export class ShowcaseService {
       .select('items')
       .lean<Pick<IInventory, 'items'>>();
 
-    const ownedIds = new Set([
-      ...DEFAULT_ITEM_IDS,
-      ...(inv?.items.map(i => i.itemId) ?? []),
-    ]);
+    const ownedIds = new Set([...DEFAULT_ITEM_IDS, ...(inv?.items.map(i => i.itemId) ?? [])]);
 
     return { ...item, isOwned: ownedIds.has(item.id), unlockedBy: item.unlockedByAchievement };
   }
@@ -153,8 +142,8 @@ export class ShowcaseService {
 
     // Map itemType to the equippedItems field name
     const fieldMap: Record<ItemType, string> = {
-      avatarEffect:   'equippedItems.avatarEffectId',
-      chatBubble:     'equippedItems.chatBubbleId',
+      avatarEffect: 'equippedItems.avatarEffectId',
+      chatBubble: 'equippedItems.chatBubbleId',
       chatBackground: 'equippedItems.chatBackgroundId',
     };
 
@@ -168,14 +157,11 @@ export class ShowcaseService {
     // Sync denormalised equippedItems on User document
     // User.equippedItems uses itemId directly (not the *Id suffix)
     const userFieldMap: Record<ItemType, string> = {
-      avatarEffect:   'equippedItems.avatarEffect',
-      chatBubble:     'equippedItems.chatBubble',
+      avatarEffect: 'equippedItems.avatarEffect',
+      chatBubble: 'equippedItems.chatBubble',
       chatBackground: 'equippedItems.chatBackground',
     };
-    await UserModel.updateOne(
-      { _id: new Types.ObjectId(userId) },
-      { $set: { [userFieldMap[itemType]]: itemId } },
-    );
+    await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { [userFieldMap[itemType]]: itemId } });
 
     // Bust caches
     const redis = getRedisService();
@@ -189,8 +175,8 @@ export class ShowcaseService {
 
     return {
       equippedItems: {
-        avatarEffectId:   updated?.equippedItems.avatarEffectId ?? null,
-        chatBubbleId:     updated?.equippedItems.chatBubbleId ?? null,
+        avatarEffectId: updated?.equippedItems.avatarEffectId ?? null,
+        chatBubbleId: updated?.equippedItems.chatBubbleId ?? null,
         chatBackgroundId: updated?.equippedItems.chatBackgroundId ?? null,
       },
     };
@@ -212,10 +198,7 @@ export class ShowcaseService {
       .select('items')
       .lean<Pick<IInventory, 'items'>>();
 
-    await InventoryModel.updateOne(
-      { userId: new Types.ObjectId(userId) },
-      { $set: { itemCount: inv?.items.length ?? 0 } },
-    );
+    await InventoryModel.updateOne({ userId: new Types.ObjectId(userId) }, { $set: { itemCount: inv?.items.length ?? 0 } });
 
     // Bust inventory cache
     const redis = getRedisService();
@@ -236,18 +219,20 @@ export class ShowcaseService {
       if (cached) {
         const inv = JSON.parse(cached) as InventoryResponse;
         return {
-          chatBubble:     inv.equippedItems.chatBubbleId,
+          chatBubble: inv.equippedItems.chatBubbleId,
           chatBackground: inv.equippedItems.chatBackgroundId,
         };
       }
-    } catch { /* miss */ }
+    } catch {
+      /* miss */
+    }
 
     const inv = await InventoryModel.findOne({ userId: new Types.ObjectId(userId) })
       .select('equippedItems')
       .lean<Pick<IInventory, 'equippedItems'>>();
 
     return {
-      chatBubble:     inv?.equippedItems.chatBubbleId ?? null,
+      chatBubble: inv?.equippedItems.chatBubbleId ?? null,
       chatBackground: inv?.equippedItems.chatBackgroundId ?? null,
     };
   }

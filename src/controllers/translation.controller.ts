@@ -8,19 +8,10 @@ const svc = new TranslationService();
 
 // ─── POST /api/translation/translate ─────────────────────────────────────────
 
-export const translateMessage = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const translateMessage = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { convId, msgId, targetLang } = req.body as TranslateMessageDto;
-    const result = await svc.translateMessage(
-      req.user._id.toString(),
-      convId,
-      msgId,
-      targetLang,
-    );
+    const result = await svc.translateMessage(req.user._id.toString(), convId, msgId, targetLang);
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);
@@ -29,11 +20,7 @@ export const translateMessage = async (
 
 // ─── GET /api/translation/languages ──────────────────────────────────────────
 
-export const getSupportedLanguages = async (
-  _req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const getSupportedLanguages = async (_req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const languages = await svc.getSupportedLanguages();
     res.json({ success: true, data: languages });

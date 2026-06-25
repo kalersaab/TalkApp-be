@@ -20,7 +20,7 @@ export interface AuthTokenPair {
 // ─── Express request augmentation ────────────────────────────────────────────
 
 export interface RequestWithUser extends Request {
-  user: IUser;
+  user?: Record<string, any>;
 }
 
 // ─── Legacy — kept so existing code compiles without changes ─────────────────
@@ -45,8 +45,8 @@ export interface GoogleTokenPayload {
 }
 
 export interface AppleTokenPayload {
-  sub: string;          // Apple user ID — stable across sessions
-  email?: string;       // only present on first sign-in
+  sub: string; // Apple user ID — stable across sessions
+  email?: string; // only present on first sign-in
   email_verified?: boolean;
 }
 

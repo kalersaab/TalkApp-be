@@ -1,16 +1,7 @@
-import {
-  IsIn,
-  IsMongoId,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUrl,
-  MaxLength,
-  ValidateIf,
-} from 'class-validator';
+import { IsIn, IsMongoId, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 
 const VALID_CONTENT_TYPES = ['text', 'image', 'audio', 'video', 'file', 'sticker'] as const;
-const CDN_REGEX = /^https:\/\//; // tighten to your CDN domain in production
+// const CDN_REGEX = /^https:\/\//; / // tighten to your CDN domain in production
 
 export class CreateConversationDto {
   @IsMongoId({ message: 'targetUserId must be a valid user ID' })

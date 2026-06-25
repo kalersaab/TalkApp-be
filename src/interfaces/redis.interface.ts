@@ -47,10 +47,7 @@ export interface PresencePayload {
 // ─── Typed error ──────────────────────────────────────────────────────────────
 
 export class RedisError extends Error {
-  constructor(
-    public readonly operation: string,
-    public readonly cause: unknown,
-  ) {
+  constructor(public readonly operation: string, public readonly cause: unknown) {
     super(`Redis ${operation} failed: ${(cause as Error)?.message ?? String(cause)}`);
     this.name = 'RedisError';
   }

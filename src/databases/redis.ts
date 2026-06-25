@@ -1,14 +1,6 @@
 import Redis, { Cluster } from 'ioredis';
 
-import {
-  REDIS_MODE,
-  REDIS_NODES,
-  REDIS_HOST,
-  REDIS_PORT,
-  REDIS_PASSWORD,
-  REDIS_KEY_PREFIX,
-  NODE_ENV,
-} from '@config';
+import { REDIS_MODE, REDIS_NODES, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_KEY_PREFIX } from '@config';
 import { logger } from '@utils/logger';
 import type {
   SocketInfo,
@@ -29,24 +21,26 @@ import { RedisError } from '@interfaces/redis.interface';
 const NS = (REDIS_KEY_PREFIX ?? 'talkapp:').replace(/:$/, ''); // strip trailing colon
 
 export const KEYS = {
-  PROFILE:      (userId: string)             => `${NS}:profile:${userId}`,
-  TRANSLATION:  (hash: string)               => `${NS}:translation:${hash}`,
-  PRESENCE:     (userId: string)             => `${NS}:presence:${userId}`,
-  CONV_CHANNEL: (convId: string)             => `${NS}:conv:${convId}`,
-  RATE_LIMIT:   (userId: string, action: string) => `${NS}:ratelimit:${userId}:${action}`,
-  INVENTORY:    (userId: string)             => `${NS}:inventory:${userId}`,
-  STREAK:       (userId: string)             => `${NS}:streak:${userId}`,
-  ONLINE_SET:                                   `${NS}:online_users`,
+  PROFILE: (userId: string) => `${NS}:profile:${userId}`,
+  TRANSLATION: (hash: string) => `${NS}:translation:${hash}`,
+  PRESENCE: (userId: string) => `${NS}:presence:${userId}`,
+  CONV_CHANNEL: (convId: string) => `${NS}:conv:${convId}`,
+  RATE_LIMIT: (userId: string, action: string) => `${NS}:ratelimit:${userId}:${action}`,
+  INVENTORY: (userId: string) => `${NS}:inventory:${userId}`,
+  STREAK: (userId: string) => `${NS}:streak:${userId}`,
+  ONLINE_SET: `${NS}:online_users`,
+  REFRESH_TOKEN: (tokenHash: string) => `${NS}:refresh:${tokenHash}`,
 } as const;
 
 // ─── TTL constants (seconds) ──────────────────────────────────────────────────
 
 export const TTL = {
-  PROFILE:      5 * 60,          // 5 minutes
-  TRANSLATION:  30 * 24 * 3600,  // 30 days
-  INVENTORY:    10 * 60,         // 10 minutes
-  STREAK:       25 * 3600,       // 25 hours
-  PRESENCE:     30,              // 30 seconds — refreshed on heartbeat
+  PROFILE: 5 * 60, // 5 minutes
+  TRANSLATION: 30 * 24 * 3600, // 30 days
+  INVENTORY: 10 * 60, // 10 minutes
+  STREAK: 25 * 3600, // 25 hours
+  PRESENCE: 30, // 30 seconds — refreshed on heartbeat
+  REFRESH_TOKEN: 30 * 24 * 3600, //30 days
 } as const;
 
 // ─── Client factory ───────────────────────────────────────────────────────────
@@ -54,12 +48,10 @@ export const TTL = {
 type RedisClient = Redis | Cluster;
 
 function buildClusterNodes(): Array<{ host: string; port: number }> {
-  return (REDIS_NODES ?? '127.0.0.1:6379')
-    .split(',')
-    .map(node => {
-      const [host, portStr] = node.trim().split(':');
-      return { host: host ?? '127.0.0.1', port: parseInt(portStr ?? '6379', 10) };
-    });
+  return (REDIS_NODES ?? '127.0.0.1:6379').split(',').map(node => {
+    const [host, portStr] = node.trim().split(':');
+    return { host: host ?? '127.0.0.1', port: parseInt(portStr ?? '6379', 10) };
+  });
 }
 
 const COMMON_OPTIONS = {
@@ -108,17 +100,20 @@ function createClient(purpose: 'data' | 'sub'): RedisClient {
 }
 
 function attachListeners(client: RedisClient, label: string): void {
-  client.on('connect',      ()    => logger.info(`[${label}] Connecting…`));
-  client.on('ready',        ()    => logger.info(`[${label}] Ready`));
-  client.on('reconnecting', ()    => logger.warn(`[${label}] Reconnecting…`));
-  client.on('error',        (err) => logger.error(`[${label}] Error: ${(err as Error).message}`));
-  client.on('close',        ()    => logger.warn(`[${label}] Connection closed`));
-  client.on('end',          ()    => logger.warn(`[${label}] Connection ended`));
+  client.on('connect', () => logger.info(`[${label}] Connecting…`));
+  client.on('ready', () => logger.info(`[${label}] Ready`));
+  client.on('reconnecting', () => logger.warn(`[${label}] Reconnecting…`));
+  client.on('error', err => logger.error(`[${label}] Error: ${(err as Error).message}`));
+  client.on('close', () => logger.warn(`[${label}] Connection closed`));
+  client.on('end', () => logger.warn(`[${label}] Connection ended`));
 }
 
 // ─── RedisService ─────────────────────────────────────────────────────────────
 
 export class RedisService {
+  get() {
+    throw new Error('Method not implemented.');
+  }
   /** General-purpose client: cache, presence, rate limiting, data ops */
   private readonly data: RedisClient;
 
@@ -131,7 +126,7 @@ export class RedisService {
 
   constructor() {
     this.data = createClient('data');
-    this.sub  = createClient('sub');
+    this.sub = createClient('sub');
   }
 
   // ─── Lifecycle ──────────────────────────────────────────────────────────────
@@ -139,7 +134,7 @@ export class RedisService {
   async connect(): Promise<void> {
     // Cluster clients connect automatically; single-node needs explicit connect
     if (this.data instanceof Redis) await this.data.connect();
-    if (this.sub  instanceof Redis) await this.sub.connect();
+    if (this.sub instanceof Redis) await this.sub.connect();
     logger.info('[Redis] Both clients connected');
   }
 
@@ -169,10 +164,7 @@ export class RedisService {
    * Subscribe this WS node to a conversation channel.
    * `callback` is invoked for every message received on the channel.
    */
-  async subscribeToConversation(
-    convId: string,
-    callback: (payload: ConvMessagePayload) => void,
-  ): Promise<void> {
+  async subscribeToConversation(convId: string, callback: (payload: ConvMessagePayload) => void): Promise<void> {
     const channel = KEYS.CONV_CHANNEL(convId);
     try {
       await this.sub.subscribe(channel);
@@ -216,11 +208,7 @@ export class RedisService {
   // CACHE
   // ══════════════════════════════════════════════════════════════════════════
 
-  async cacheProfile(
-    userId: string,
-    profileData: ProfileData,
-    ttlSeconds = TTL.PROFILE,
-  ): Promise<void> {
+  async cacheProfile(userId: string, profileData: ProfileData, ttlSeconds = TTL.PROFILE): Promise<void> {
     try {
       await this.data.set(KEYS.PROFILE(userId), JSON.stringify(profileData), 'EX', ttlSeconds);
     } catch (err) {
@@ -245,11 +233,7 @@ export class RedisService {
     }
   }
 
-  async cacheTranslation(
-    hash: string,
-    translation: string,
-    ttlSeconds = TTL.TRANSLATION,
-  ): Promise<void> {
+  async cacheTranslation(hash: string, translation: string, ttlSeconds = TTL.TRANSLATION): Promise<void> {
     try {
       await this.data.set(KEYS.TRANSLATION(hash), translation, 'EX', ttlSeconds);
     } catch (err) {
@@ -265,11 +249,7 @@ export class RedisService {
     }
   }
 
-  async cacheInventory(
-    userId: string,
-    inventoryData: InventoryData,
-    ttlSeconds = TTL.INVENTORY,
-  ): Promise<void> {
+  async cacheInventory(userId: string, inventoryData: InventoryData, ttlSeconds = TTL.INVENTORY): Promise<void> {
     try {
       await this.data.set(KEYS.INVENTORY(userId), JSON.stringify(inventoryData), 'EX', ttlSeconds);
     } catch (err) {
@@ -395,6 +375,65 @@ export class RedisService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // HYBRID AUTHENTICATION SESSIONS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Save an active refresh token session state hash to memory.
+   *
+   */
+
+  async setRefreshTokenSession(
+    tokenHash: string,
+    sessionData: { userId: string; used: boolean; family: string; isCompromised?: boolean },
+    ttlSeconds = TTL.REFRESH_TOKEN,
+  ): Promise<void> {
+    try {
+      await this.data.set(KEYS.REFRESH_TOKEN(tokenHash), JSON.stringify(sessionData), 'EX', ttlSeconds);
+    } catch (err) {
+      throw new RedisError('setRefreshTokenSession', err);
+    }
+  }
+
+  /**
+   * Look up a refresh token session state details by its signature hash.
+   * Uses Lua script to atomically retrieve and delete the token in one operation.
+   * This prevents reuse of the same refresh token across multiple requests.
+   */
+  async consumeRefreshTokenSession(tokenHash: string): Promise<{ userId: string; family: string; used: boolean; isCompromised?: boolean } | null> {
+    try {
+      const key = KEYS.REFRESH_TOKEN(tokenHash);
+      // Lua script: GET then DEL atomically
+      const raw = (await this.data.eval(
+        `
+          local value = redis.call('GET', KEYS[1])
+          if value then
+            redis.call('DEL', KEYS[1])
+          end
+          return value
+        `,
+        1,
+        key,
+      )) as string | null;
+
+      return raw ? (JSON.parse(raw) as { userId: string; family: string; used: boolean; isCompromised?: boolean }) : null;
+    } catch (err) {
+      throw new RedisError('consumeRefreshTokenSession', err);
+    }
+  }
+
+  /**
+   * Evict/Revoke a refresh token immediately (Logout or compromise enforcement).
+   */
+  async invalidateRefreshTokenSession(tokenHash: string): Promise<void> {
+    try {
+      await this.data.del(KEYS.REFRESH_TOKEN(tokenHash));
+    } catch (err) {
+      throw new RedisError('invalidateRefreshTokenSession', err);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // RATE LIMITING  — sliding window via sorted set
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -416,11 +455,7 @@ export class RedisService {
    *   checkRateLimit(`${userId}:translation`, 200, 60)   // 200 translations/min
    *   checkRateLimit(`${userId}:follow`,      30,  60)   // 30 follows/min
    */
-  async checkRateLimit(
-    key: string,
-    limit: number,
-    windowSeconds: number,
-  ): Promise<RateLimitResult> {
+  async checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
     const redisKey = KEYS.RATE_LIMIT(key, 'window');
     const now = Date.now();
     const windowStart = now - windowSeconds * 1000;
@@ -470,6 +505,24 @@ export class RedisService {
     } catch (err) {
       return { status: 'error', latencyMs: Date.now() - start };
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ACCESSORS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get the general-purpose data client for direct Redis operations
+   */
+  getDataClient(): RedisClient {
+    return this.data;
+  }
+
+  /**
+   * Get the pub/sub client for subscriptions
+   */
+  getSubClient(): RedisClient {
+    return this.sub;
   }
 }
 

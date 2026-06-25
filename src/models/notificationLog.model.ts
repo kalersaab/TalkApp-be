@@ -16,12 +16,12 @@ export interface INotificationLog extends Document {
 
 const notificationLogSchema = new Schema<INotificationLog>(
   {
-    userId:       { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    platform:     { type: String, enum: ['android', 'ios'], required: true },
-    type:         { type: String, enum: ['message', 'follow', 'achievement', 'post_like'], required: true },
-    status:       { type: String, enum: ['sent', 'failed', 'invalid_token'], required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    platform: { type: String, enum: ['android', 'ios'], required: true },
+    type: { type: String, enum: ['message', 'follow', 'achievement', 'post_like'], required: true },
+    status: { type: String, enum: ['sent', 'failed', 'invalid_token'], required: true },
     errorMessage: { type: String, default: null },
-    attempt:      { type: Number, default: 1 },
+    attempt: { type: Number, default: 1 },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

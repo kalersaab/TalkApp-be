@@ -11,26 +11,26 @@ export interface SocketData {
 
 export interface ClientToServerEvents {
   send_message: (payload: SendMessagePayload) => void;
-  typing_start:  (payload: TypingPayload) => void;
-  typing_stop:   (payload: TypingPayload) => void;
-  message_read:  (payload: MessageReadPayload) => void;
-  heartbeat:     () => void;
+  typing_start: (payload: TypingPayload) => void;
+  typing_stop: (payload: TypingPayload) => void;
+  message_read: (payload: MessageReadPayload) => void;
+  heartbeat: () => void;
 }
 
 // ─── Server → Client events ───────────────────────────────────────────────────
 
 export interface ServerToClientEvents {
-  connected:             (payload: ConnectedPayload) => void;
-  message_ack:           (payload: MessageAckPayload) => void;
-  message_delivered:     (payload: MessageDeliveredPayload) => void;
-  new_message:           (payload: NewMessagePayload) => void;
-  typing:                (payload: TypingEventPayload) => void;
-  read_receipt:          (payload: ReadReceiptPayload) => void;
-  heartbeat_ack:         () => void;
-  rate_limit_error:      (payload: ErrorPayload) => void;
-  error:                 (payload: ErrorPayload) => void;
-  achievement_unlocked:  (payload: AchievementUnlockedPayload) => void;
-  rank_changed:          (payload: RankChangedPayload) => void;
+  connected: (payload: ConnectedPayload) => void;
+  message_ack: (payload: MessageAckPayload) => void;
+  message_delivered: (payload: MessageDeliveredPayload) => void;
+  new_message: (payload: NewMessagePayload) => void;
+  typing: (payload: TypingEventPayload) => void;
+  read_receipt: (payload: ReadReceiptPayload) => void;
+  heartbeat_ack: () => void;
+  rate_limit_error: (payload: ErrorPayload) => void;
+  error: (payload: ErrorPayload) => void;
+  achievement_unlocked: (payload: AchievementUnlockedPayload) => void;
+  rank_changed: (payload: RankChangedPayload) => void;
 }
 
 // ─── Inter-server events (Redis adapter) ─────────────────────────────────────
@@ -65,7 +65,7 @@ export interface ConnectedPayload {
 
 export interface MessageAckPayload {
   clientMsgId: string;
-  msgId: string;       // server-assigned TIMEUUID
+  msgId: string; // server-assigned TIMEUUID
   status: MessageStatus;
 }
 

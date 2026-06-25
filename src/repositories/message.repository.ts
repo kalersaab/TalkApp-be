@@ -2,7 +2,6 @@ import { types } from 'cassandra-driver';
 
 import { getCassandraClient, CQL } from '@databases/cassandra';
 import type {
-  CassandraMessage,
   MessageDto,
   OfflineQueueDto,
   PagedMessages,
@@ -28,9 +27,7 @@ function rowToMessageDto(row: types.Row): MessageDto {
     mediaUrl: (row['media_url'] as string | null) ?? null,
     status: row['status'] as MessageStatus,
     // Cassandra MAP<TEXT,TEXT> comes back as a JS Map
-    translations: row['translations']
-      ? Object.fromEntries((row['translations'] as Map<string, string>).entries())
-      : {},
+    translations: row['translations'] ? Object.fromEntries((row['translations'] as Map<string, string>).entries()) : {},
     isEncrypted: (row['is_encrypted'] as boolean) ?? false,
     createdAt: row['created_at'] as Date,
   };
@@ -107,11 +104,7 @@ export class MessageRepository {
    * Pass `beforeMsgId` for cursor-based pagination — returns messages older
    * than that TimeUUID, which avoids OFFSET scans entirely.
    */
-  async getMessages(
-    convId: string,
-    limit = 50,
-    beforeMsgId?: string,
-  ): Promise<PagedMessages> {
+  async getMessages(convId: string, limit = 50, beforeMsgId?: string): Promise<PagedMessages> {
     const convUuid = types.Uuid.fromString(convId);
     const safeLimit = Math.min(limit, 200); // hard cap
 
@@ -120,25 +113,15 @@ export class MessageRepository {
 
       if (beforeMsgId) {
         const beforeUuid = types.TimeUuid.fromString(beforeMsgId);
-        result = await this.db.execute(
-          CQL.SELECT_MESSAGES_BEFORE,
-          [convUuid, beforeUuid, safeLimit],
-          { fetchSize: safeLimit },
-        );
+        result = await this.db.execute(CQL.SELECT_MESSAGES_BEFORE, [convUuid, beforeUuid, safeLimit], { fetchSize: safeLimit });
       } else {
-        result = await this.db.execute(
-          CQL.SELECT_MESSAGES,
-          [convUuid, safeLimit],
-          { fetchSize: safeLimit },
-        );
+        result = await this.db.execute(CQL.SELECT_MESSAGES, [convUuid, safeLimit], { fetchSize: safeLimit });
       }
 
       const messages = result.rows.map(rowToMessageDto);
 
       // Encode the driver's paging state as a base64 string for the client
-      const pagingState = result.pageState
-        ? Buffer.from(result.pageState).toString('base64')
-        : null;
+      const pagingState = result.pageState ? Buffer.from(result.pageState).toString('base64') : null;
 
       return { messages, pagingState };
     } catch (err) {
@@ -151,7 +134,7 @@ export class MessageRepository {
   /** Fetch a single message by its partition key (convId) and clustering key (msgId). */
   async getMessageById(convId: string, msgId: string): Promise<MessageDto | null> {
     const convUuid = types.Uuid.fromString(convId);
-    const msgUuid  = types.TimeUuid.fromString(msgId);
+    const msgUuid = types.TimeUuid.fromString(msgId);
 
     try {
       const result = await this.db.execute(CQL.SELECT_MESSAGE_BY_ID, [convUuid, msgUuid]);
@@ -226,13 +209,7 @@ export class MessageRepository {
     const now = new Date();
 
     try {
-      await this.db.execute(CQL.INSERT_OFFLINE, [
-        userUuid,
-        msgUuid,
-        convUuid,
-        payload,
-        now,
-      ]);
+      await this.db.execute(CQL.INSERT_OFFLINE, [userUuid, msgUuid, convUuid, payload, now]);
       logger.debug(`[MessageRepo] queued msg ${msgUuid} for offline user ${input.userId}`);
     } catch (err) {
       throw new CassandraError('addToOfflineQueue', err);

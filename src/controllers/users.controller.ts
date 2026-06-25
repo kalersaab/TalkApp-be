@@ -1,13 +1,17 @@
-import { GetUserQueryDto } from '@/dtos/users.dto';
+import { CreateUserDto, GetUserQueryDto } from '@/dtos/users.dto';
 import { HttpException } from '@/exceptions/HttpException';
-import { LoginUser, User } from '@interfaces/users.interface';
+import { IUser } from '@interfaces/users.interface';
+import { AuthService } from '@services/auth.service';
 import { UserService } from '@services/users.service';
 import { NextFunction, Request, Response } from 'express';
 
 export class UserController {
   private user: UserService;
+  private auth: AuthService;
+
   constructor() {
     this.user = new UserService();
+    this.auth = new AuthService();
   }
 
   public getUsers = async (req: Request, res: Response, next: NextFunction) => {
@@ -23,7 +27,7 @@ export class UserController {
   public getUserById = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId: any = req.params.id;
-      const findOneUserData: User = await this.user.findUserById(userId);
+      const findOneUserData: IUser = await this.user.findUserById(userId);
 
       res.status(200).json({ data: findOneUserData, message: 'user fetched successfully' });
     } catch (error) {
@@ -33,7 +37,7 @@ export class UserController {
 
   public createUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userData: User = req.body;
+      const userData: CreateUserDto = req.body;
       const createUserData = await this.user.createUser(userData);
 
       res.status(201).json({ data: createUserData, message: 'user created successfully' });
@@ -52,35 +56,20 @@ export class UserController {
       next(new HttpException(500, error.message || 'Something went wrong'));
     }
   };
+
   public resendOtp = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const email = req.body.email;
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: 'Email is required' });
+      }
+
       const resendOtpData = await this.user.resendOtp(email);
 
       res.status(200).json({ data: resendOtpData, message: 'otp resend successfully' });
     } catch (error) {
-      next(new HttpException(500, error.message || 'Something went wrong'));
-    }
-  };
-
-  public loginUser = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const userData: LoginUser = req.body;
-      const loginUserData = await this.user.login(userData);
-
-      res.status(200).json({ data: loginUserData, message: 'user logged in successfully' });
-    } catch (error) {
-      next(new HttpException(error.status, error.message || 'Something went wrong'));
-    }
-  };
-
-  public getLoginUserData = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const user = req.user?._id;
-      const userData = await this.user.meApi(user);
-      res.status(200).json({ data: userData[0], message: 'user data fetched successfully' });
-    } catch (error) {
-      next(new HttpException(500, error.message || 'Something went wrong'));
+      next(new HttpException(error.status || 500, error.message || 'Something went wrong'));
     }
   };
 

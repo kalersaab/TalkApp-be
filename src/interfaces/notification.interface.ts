@@ -1,5 +1,4 @@
 import type { DevicePlatform } from '@models/deviceToken.model';
-import type { NotificationType } from '@models/notificationLog.model';
 
 // ─── Notification payload ─────────────────────────────────────────────────────
 

@@ -18,20 +18,12 @@ export class MatchingRoute implements Routes {
     this.router.use(AuthMiddleware);
 
     // POST /api/matching/find
-    this.router.post(
-      `${this.path}/find`,
-      validationMiddleware(FindPartnersDto, 'body'),
-      findPartners,
-    );
+    this.router.post(`${this.path}/find`, validationMiddleware(FindPartnersDto, 'body'), findPartners);
 
     // GET /api/matching/suggestions
     this.router.get(`${this.path}/suggestions`, getSuggestions);
 
     // POST /api/matching/preferences
-    this.router.post(
-      `${this.path}/preferences`,
-      validationMiddleware(SavePreferencesDto, 'body'),
-      savePreferences,
-    );
+    this.router.post(`${this.path}/preferences`, validationMiddleware(SavePreferencesDto, 'body'), savePreferences);
   }
 }

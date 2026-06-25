@@ -4,9 +4,9 @@ type State = 'closed' | 'open' | 'half-open';
 
 interface CircuitBreakerOptions {
   name: string;
-  failureThreshold: number;  // failures before opening
-  successThreshold: number;  // successes in half-open before closing
-  timeout: number;           // ms to wait before trying half-open
+  failureThreshold: number; // failures before opening
+  successThreshold: number; // successes in half-open before closing
+  timeout: number; // ms to wait before trying half-open
 }
 
 /**
@@ -68,6 +68,10 @@ export class CircuitBreaker {
     }
   }
 
-  get isOpen(): boolean { return this.state === 'open'; }
-  get currentState(): State { return this.state; }
+  get isOpen(): boolean {
+    return this.state === 'open';
+  }
+  get currentState(): State {
+    return this.state;
+  }
 }

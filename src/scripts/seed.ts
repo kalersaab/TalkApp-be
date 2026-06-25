@@ -57,7 +57,9 @@ async function seed(): Promise<void> {
     const nativeLang = pick(LANGS);
     const learningLangs = LANGS.filter(l => l !== nativeLang).slice(0, rand(1, 5));
     const proficiencyLevels: Record<string, string> = {};
-    learningLangs.forEach(l => { proficiencyLevels[l] = pick(LEVELS); });
+    learningLangs.forEach(l => {
+      proficiencyLevels[l] = pick(LEVELS);
+    });
 
     const rank = pick(RANKS);
     const rankMedalMap: Record<string, number> = { junior: 0, collector: 3, senior: 10, elite: 25, legendary: 50 };
@@ -70,7 +72,7 @@ async function seed(): Promise<void> {
       avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=user${i + 1}`,
       provider: 'local' as const,
       googleId: null,
-      role: i === 0 ? 'admin' as const : 'user' as const,
+      role: i === 0 ? ('admin' as const) : ('user' as const),
       isVerified: true,
       isActive: true,
 
@@ -82,10 +84,10 @@ async function seed(): Promise<void> {
       dateOfBirth: new Date(1990 + rand(0, 15), rand(0, 11), rand(1, 28)),
       location: {
         type: 'Point' as const,
-        coordinates: [
-          parseFloat((rand(-180, 180) + Math.random()).toFixed(6)),
-          parseFloat((rand(-90, 90) + Math.random()).toFixed(6)),
-        ] as [number, number],
+        coordinates: [parseFloat((rand(-180, 180) + Math.random()).toFixed(6)), parseFloat((rand(-90, 90) + Math.random()).toFixed(6))] as [
+          number,
+          number,
+        ],
       },
       bio: `Hi! I'm TestUser${i + 1}. I love learning languages and making new friends.`,
 

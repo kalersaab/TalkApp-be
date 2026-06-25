@@ -2,18 +2,18 @@ import { Schema, model, type Document, type Types } from 'mongoose';
 
 export interface IRefreshToken extends Document {
   userId: Types.ObjectId;
-  tokenHash: string;   // SHA-256 hash of the raw token — never store raw
-  family: string;      // rotation family id — detects reuse attacks
+  tokenHash: string; // SHA-256 hash of the raw token — never store raw
+  family: string; // rotation family id — detects reuse attacks
   expiresAt: Date;
   createdAt: Date;
 }
 
 const refreshTokenSchema = new Schema<IRefreshToken>(
   {
-    userId:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     tokenHash: { type: String, required: true },
-    family:    { type: String, required: true }, // same family = same rotation chain
-    expiresAt: { type: Date,   required: true },
+    family: { type: String, required: true }, // same family = same rotation chain
+    expiresAt: { type: Date, required: true },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },

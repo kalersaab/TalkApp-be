@@ -19,12 +19,7 @@ export class TranslationRoute implements Routes {
     this.router.use(AuthMiddleware);
 
     // POST /api/translation/translate
-    this.router.post(
-      `${this.path}/translate`,
-      translationLimiter,
-      validationMiddleware(TranslateMessageDto, 'body'),
-      translateMessage,
-    );
+    this.router.post(`${this.path}/translate`, translationLimiter, validationMiddleware(TranslateMessageDto, 'body'), translateMessage);
 
     // GET /api/translation/languages
     this.router.get(`${this.path}/languages`, getSupportedLanguages);

@@ -27,10 +27,7 @@ const conversationSchema = new Schema<IConversation>(
 // Compound index — the primary lookup: "find conversation between user A and user B"
 conversationSchema.index({ participantIds: 1 });
 // Unique pair — prevents duplicate conversations between the same two users
-conversationSchema.index(
-  { 'participantIds.0': 1, 'participantIds.1': 1 },
-  { unique: true, sparse: true },
-);
+conversationSchema.index({ 'participantIds.0': 1, 'participantIds.1': 1 }, { unique: true, sparse: true });
 conversationSchema.index({ updatedAt: -1 }); // sort by most recent activity
 
 export const ConversationModel = model<IConversation>('Conversation', conversationSchema);

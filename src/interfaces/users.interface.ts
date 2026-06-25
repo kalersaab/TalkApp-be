@@ -46,12 +46,14 @@ export interface EquippedInventoryItems {
 
 export interface IUser extends Document {
   displayName: string;
+  username: string;
   email: string;
   passwordHash: string | null;
   avatarUrl: string | null;
   provider: Provider;
   googleId: string | null;
   appleId: string | null;
+  facebookId: string | null;
   role: Role;
   isVerified: boolean;
   isActive: boolean;
@@ -150,4 +152,10 @@ export interface IStreak extends Document {
 export interface LoginUser {
   email: string;
   password: string;
+}
+
+export interface IRedisSession {
+  userId: string;
+  family: string;
+  used: boolean;
 }

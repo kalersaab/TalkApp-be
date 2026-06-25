@@ -18,17 +18,9 @@ export class NotificationRoute implements Routes {
     this.router.use(AuthMiddleware);
 
     // POST /api/notifications/token
-    this.router.post(
-      `${this.path}/token`,
-      validationMiddleware(SaveDeviceTokenDto, 'body'),
-      saveToken,
-    );
+    this.router.post(`${this.path}/token`, validationMiddleware(SaveDeviceTokenDto, 'body'), saveToken);
 
     // POST /api/notifications/preferences
-    this.router.post(
-      `${this.path}/preferences`,
-      validationMiddleware(UpdateNotificationPreferencesDto, 'body', true),
-      updatePreferences,
-    );
+    this.router.post(`${this.path}/preferences`, validationMiddleware(UpdateNotificationPreferencesDto, 'body', true), updatePreferences);
   }
 }

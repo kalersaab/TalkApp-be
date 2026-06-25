@@ -5,12 +5,7 @@
  */
 import type { Server } from 'socket.io';
 
-import type {
-  ClientToServerEvents,
-  ServerToClientEvents,
-  InterServerEvents,
-  SocketData,
-} from '@interfaces/socket.interface';
+import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from '@interfaces/socket.interface';
 
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 

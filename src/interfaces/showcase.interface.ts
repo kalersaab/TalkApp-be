@@ -41,6 +41,6 @@ export interface EquipResult {
 // ─── Sender equipped items (attached to chat messages) ───────────────────────
 
 export interface SenderEquipped {
-  chatBubble: string | null;    // itemId
+  chatBubble: string | null; // itemId
   chatBackground: string | null; // itemId
 }

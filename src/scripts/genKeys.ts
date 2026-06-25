@@ -8,12 +8,12 @@ import { generateKeyPairSync } from 'crypto';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
-  publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
   privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
 });
 
 const b64Private = Buffer.from(privateKey).toString('base64');
-const b64Public  = Buffer.from(publicKey).toString('base64');
+const b64Public = Buffer.from(publicKey).toString('base64');
 
 console.log('\n# Paste these into your .env.*.local file:\n');
 console.log(`JWT_PRIVATE_KEY = ${b64Private}`);

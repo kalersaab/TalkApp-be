@@ -11,9 +11,9 @@ export interface IDeviceToken extends Document {
 
 const deviceTokenSchema = new Schema<IDeviceToken>(
   {
-    userId:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     platform: { type: String, enum: ['android', 'ios'], required: true },
-    token:    { type: String, required: true },
+    token: { type: String, required: true },
   },
   { timestamps: { createdAt: false, updatedAt: true } },
 );

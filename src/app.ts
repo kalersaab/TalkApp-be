@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import http from 'http';
 import { join } from 'path';
 import compression from 'compression';
@@ -28,7 +29,7 @@ class App {
 
   constructor(routes: Routes[]) {
     this.app = express();
-    this.env  = NODE_ENV || 'development';
+    this.env = NODE_ENV || 'development';
     this.port = PORT || 8000;
 
     // Single HTTP server shared by Express + Socket.io
@@ -93,11 +94,11 @@ class App {
 
   private initializeRoutes(routes: Routes[]): void {
     routes.forEach(route => {
-      this.app.use('/api', route.router);
+      this.app.use('/api/', route.router);
     });
 
     // Health endpoint
-    this.app.get('/health', (_req, res) => {
+    this.app.get('/api/health', (_req, res) => {
       res.json({ status: 'ok', uptime: process.uptime() });
     });
   }

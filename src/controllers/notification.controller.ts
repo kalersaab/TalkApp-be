@@ -8,11 +8,7 @@ const svc = new NotificationService();
 
 // ─── POST /api/notifications/token ───────────────────────────────────────────
 
-export const saveToken = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const saveToken = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { platform, token } = req.body as SaveDeviceTokenDto;
     await svc.saveDeviceToken(req.user._id.toString(), platform, token);
@@ -24,16 +20,9 @@ export const saveToken = async (
 
 // ─── POST /api/notifications/preferences ─────────────────────────────────────
 
-export const updatePreferences = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const updatePreferences = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
-    await svc.updatePreferences(
-      req.user._id.toString(),
-      req.body as UpdateNotificationPreferencesDto,
-    );
+    await svc.updatePreferences(req.user._id.toString(), req.body as UpdateNotificationPreferencesDto);
     res.json({ success: true });
   } catch (err) {
     next(err);

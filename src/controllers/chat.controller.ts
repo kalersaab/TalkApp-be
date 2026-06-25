@@ -2,17 +2,13 @@ import type { Response, NextFunction } from 'express';
 
 import type { RequestWithUser } from '@interfaces/auth.interface';
 import { ChatService } from '@services/chat.service';
-import type { CreateConversationDto, SendMessageDto, GetMessagesQueryDto, GetConversationsQueryDto } from '@dtos/chat.dto';
+import type { CreateConversationDto, GetMessagesQueryDto, GetConversationsQueryDto } from '@dtos/chat.dto';
 
 const svc = new ChatService();
 
 // ─── GET /api/chat/conversations ──────────────────────────────────────────────
 
-export const getConversations = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const getConversations = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { lastConvId, limit } = req.query as GetConversationsQueryDto;
     const result = await svc.getConversations({
@@ -28,11 +24,7 @@ export const getConversations = async (
 
 // ─── POST /api/chat/conversations ─────────────────────────────────────────────
 
-export const createConversation = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const createConversation = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { targetUserId } = req.body as CreateConversationDto;
     const conv = await svc.createConversation({
@@ -47,11 +39,7 @@ export const createConversation = async (
 
 // ─── GET /api/chat/conversations/:convId/messages ─────────────────────────────
 
-export const getMessages = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const getMessages = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { convId } = req.params as { convId: string };
     const { beforeMsgId, limit } = req.query as GetMessagesQueryDto;
@@ -71,11 +59,7 @@ export const getMessages = async (
 
 // ─── DELETE /api/chat/conversations/:convId ───────────────────────────────────
 
-export const deleteConversation = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const deleteConversation = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { convId } = req.params as { convId: string };
     await svc.softDeleteConversation(convId, req.user._id.toString());

@@ -9,19 +9,13 @@ function getS3Client(): S3Client {
     s3 = new S3Client({
       region: AWS_REGION ?? 'us-east-1',
       credentials:
-        AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY
-          ? { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY }
-          : undefined, // falls back to IAM role in production
+        AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY ? { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY } : undefined, // falls back to IAM role in production
     });
   }
   return s3;
 }
 
-export async function uploadToS3(
-  key: string,
-  body: Buffer,
-  contentType: string,
-): Promise<string> {
+export async function uploadToS3(key: string, body: Buffer, contentType: string): Promise<string> {
   const bucket = AWS_S3_BUCKET ?? 'talkapp-media';
   const cdnBase = (AWS_S3_CDN_URL ?? `https://${bucket}.s3.amazonaws.com`).replace(/\/$/, '');
 

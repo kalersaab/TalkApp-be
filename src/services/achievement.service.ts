@@ -19,12 +19,12 @@ interface UnlockableItem {
 }
 
 const ACHIEVEMENT_ITEM_MAP: Record<string, UnlockableItem> = {
-  streak_7:        { itemId: 'avatar_effect_flame',      itemType: 'avatarEffect' },
-  streak_30:       { itemId: 'chat_bubble_gold',         itemType: 'chatBubble' },
-  streak_100:      { itemId: 'chat_background_legend',   itemType: 'chatBackground' },
-  followers_100:   { itemId: 'avatar_effect_crown',      itemType: 'avatarEffect' },
-  post_popular:    { itemId: 'chat_bubble_star',         itemType: 'chatBubble' },
-  partners_10:     { itemId: 'chat_background_world',    itemType: 'chatBackground' },
+  streak_7: { itemId: 'avatar_effect_flame', itemType: 'avatarEffect' },
+  streak_30: { itemId: 'chat_bubble_gold', itemType: 'chatBubble' },
+  streak_100: { itemId: 'chat_background_legend', itemType: 'chatBackground' },
+  followers_100: { itemId: 'avatar_effect_crown', itemType: 'avatarEffect' },
+  post_popular: { itemId: 'chat_bubble_star', itemType: 'chatBubble' },
+  partners_10: { itemId: 'chat_background_world', itemType: 'chatBackground' },
 } as const;
 
 // ─── Collector rank thresholds ────────────────────────────────────────────────
@@ -33,8 +33,8 @@ const RANK_THRESHOLDS: Array<{ min: number; rank: CollectorRank }> = [
   { min: 51, rank: 'legendary' },
   { min: 31, rank: 'elite' },
   { min: 16, rank: 'senior' },
-  { min: 6,  rank: 'collector' },
-  { min: 0,  rank: 'junior' },
+  { min: 6, rank: 'collector' },
+  { min: 0, rank: 'junior' },
 ];
 
 function itemCountToRank(count: number): CollectorRank {
@@ -52,14 +52,9 @@ export interface AwardResult {
 // ─── AchievementService ───────────────────────────────────────────────────────
 
 export class AchievementService {
-
   // ── awardAchievement ─────────────────────────────────────────────────────────
 
-  async awardAchievement(
-    userId: string,
-    achievementType: string,
-    medalTier: MedalTier,
-  ): Promise<AwardResult | null> {
+  async awardAchievement(userId: string, achievementType: string, medalTier: MedalTier): Promise<AwardResult | null> {
     // 1. Idempotency check — skip if already earned
     const existing = await AchievementModel.findOne({
       userId: new Types.ObjectId(userId),
@@ -103,10 +98,7 @@ export class AchievementService {
     const count = await AchievementModel.countDocuments({
       userId: new Types.ObjectId(userId),
     });
-    await UserModel.updateOne(
-      { _id: new Types.ObjectId(userId) },
-      { $set: { totalMedalCount: count } },
-    );
+    await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { totalMedalCount: count } });
   }
 
   // ── recalculateCollectorRank ──────────────────────────────────────────────────
@@ -125,16 +117,10 @@ export class AchievementService {
     const oldRank = user.collectorRank as CollectorRank;
     if (oldRank === newRank) return null; // no change
 
-    await UserModel.updateOne(
-      { _id: new Types.ObjectId(userId) },
-      { $set: { collectorRank: newRank } },
-    );
+    await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { collectorRank: newRank } });
 
     // Sync rank on inventory document too
-    await InventoryModel.updateOne(
-      { userId: new Types.ObjectId(userId) },
-      { $set: { collectorRank: newRank } },
-    );
+    await InventoryModel.updateOne({ userId: new Types.ObjectId(userId) }, { $set: { collectorRank: newRank } });
 
     // Bust profile cache
     await getRedisService()
@@ -164,13 +150,12 @@ export class AchievementService {
     if (!updated) return null;
 
     // Keep itemCount in sync
-    await InventoryModel.updateOne(
-      { userId: new Types.ObjectId(userId) },
-      { $set: { itemCount: updated.items.length } },
-    );
+    await InventoryModel.updateOne({ userId: new Types.ObjectId(userId) }, { $set: { itemCount: updated.items.length } });
 
     // Bust inventory cache
-    await getRedisService().invalidateInventory(userId).catch(() => null);
+    await getRedisService()
+      .invalidateInventory(userId)
+      .catch(() => null);
 
     return updated;
   }
@@ -179,9 +164,9 @@ export class AchievementService {
 
   async checkStreakAchievements(userId: string, currentStreak: number): Promise<void> {
     const checks: Array<{ type: string; threshold: number; tier: MedalTier }> = [
-      { type: 'streak_3',   threshold: 3,   tier: 'bronze' },
-      { type: 'streak_7',   threshold: 7,   tier: 'silver' },
-      { type: 'streak_30',  threshold: 30,  tier: 'gold' },
+      { type: 'streak_3', threshold: 3, tier: 'bronze' },
+      { type: 'streak_7', threshold: 7, tier: 'silver' },
+      { type: 'streak_30', threshold: 30, tier: 'gold' },
       { type: 'streak_100', threshold: 100, tier: 'platinum' },
     ];
 
@@ -252,13 +237,7 @@ export class AchievementService {
       .select('participantIds')
       .lean();
 
-    const partnerCount = new Set(
-      conversations.flatMap(c =>
-        c.participantIds
-          .map(id => id.toString())
-          .filter(id => id !== userId),
-      ),
-    ).size;
+    const partnerCount = new Set(conversations.flatMap(c => c.participantIds.map(id => id.toString()).filter(id => id !== userId))).size;
 
     if (partnerCount >= 10) {
       await this.awardAchievement(userId, 'partners_10', 'gold');

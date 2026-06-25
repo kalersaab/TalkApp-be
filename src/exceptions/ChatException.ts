@@ -3,20 +3,14 @@ import { HttpException } from './HttpException';
 // ─── Cassandra errors ─────────────────────────────────────────────────────────
 
 export class CassandraWriteError extends Error {
-  constructor(
-    public readonly operation: string,
-    public readonly cause: unknown,
-  ) {
+  constructor(public readonly operation: string, public readonly cause: unknown) {
     super(`Cassandra write [${operation}] failed: ${(cause as Error)?.message ?? String(cause)}`);
     this.name = 'CassandraWriteError';
   }
 }
 
 export class CassandraReadError extends Error {
-  constructor(
-    public readonly operation: string,
-    public readonly cause: unknown,
-  ) {
+  constructor(public readonly operation: string, public readonly cause: unknown) {
     super(`Cassandra read [${operation}] failed: ${(cause as Error)?.message ?? String(cause)}`);
     this.name = 'CassandraReadError';
   }

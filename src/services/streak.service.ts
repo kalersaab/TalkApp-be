@@ -56,8 +56,8 @@ export class StreakService {
       let lastActiveDateStr: string | null;
 
       if (cached) {
-        currentStreak    = cached.currentStreak;
-        longestStreak    = cached.longestStreak;
+        currentStreak = cached.currentStreak;
+        longestStreak = cached.longestStreak;
         lastActiveDateStr = cached.lastActiveDate;
       } else {
         // STEP 3 — fallback to MongoDB
@@ -80,8 +80,8 @@ export class StreakService {
           await this.writeCache(userId, 1, 1, today);
           return result;
         }
-        currentStreak    = doc.currentStreak;
-        longestStreak    = doc.longestStreak;
+        currentStreak = doc.currentStreak;
+        longestStreak = doc.longestStreak;
         lastActiveDateStr = toUTCDateString(doc.lastActiveDate);
       }
 
@@ -130,9 +130,7 @@ export class StreakService {
         // Non-blocking — achievement failure must never break streak update
         void this.achievementService
           .checkStreakAchievements(userId, newStreak)
-          .catch(err =>
-            logger.warn(`[StreakService] achievement check failed: ${(err as Error).message}`),
-          );
+          .catch(err => logger.warn(`[StreakService] achievement check failed: ${(err as Error).message}`));
       }
 
       logger.debug(`[StreakService] user ${userId}: ${currentStreak} → ${newStreak} (record=${isNewRecord})`);
@@ -158,9 +156,9 @@ export class StreakService {
       if (cached) {
         return {
           hasChattedToday: cached.lastActiveDate === today,
-          currentStreak:   cached.currentStreak,
-          longestStreak:   cached.longestStreak,
-          lastActiveDate:  cached.lastActiveDate,
+          currentStreak: cached.currentStreak,
+          longestStreak: cached.longestStreak,
+          lastActiveDate: cached.lastActiveDate,
         };
       }
 
@@ -172,9 +170,9 @@ export class StreakService {
       const lastActiveDateStr = toUTCDateString(doc.lastActiveDate);
       return {
         hasChattedToday: lastActiveDateStr === today,
-        currentStreak:   doc.currentStreak,
-        longestStreak:   doc.longestStreak,
-        lastActiveDate:  lastActiveDateStr,
+        currentStreak: doc.currentStreak,
+        longestStreak: doc.longestStreak,
+        lastActiveDate: lastActiveDateStr,
       };
     } catch (err) {
       logger.error(`[StreakService] getDailyStreakStatus failed for ${userId}: ${(err as Error).message}`);
@@ -184,23 +182,11 @@ export class StreakService {
 
   // ── Private helpers ───────────────────────────────────────────────────────────
 
-  private async syncUserFields(
-    userId: string,
-    currentStreak: number,
-    longestStreak: number,
-  ): Promise<void> {
-    await UserModel.updateOne(
-      { _id: new Types.ObjectId(userId) },
-      { $set: { currentStreak, longestStreak, lastActiveDate: new Date() } },
-    );
+  private async syncUserFields(userId: string, currentStreak: number, longestStreak: number): Promise<void> {
+    await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { currentStreak, longestStreak, lastActiveDate: new Date() } });
   }
 
-  private async writeCache(
-    userId: string,
-    currentStreak: number,
-    longestStreak: number,
-    lastActiveDate: string,
-  ): Promise<void> {
+  private async writeCache(userId: string, currentStreak: number, longestStreak: number, lastActiveDate: string): Promise<void> {
     await getRedisService()
       .setStreak(userId, { currentStreak, longestStreak, lastActiveDate })
       .catch(() => null);

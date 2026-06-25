@@ -4,12 +4,7 @@ import { ConversationModel } from '@models/conversation.model';
 import { UserModel } from '@models/users.model';
 import { getMessageRepository } from '@repositories/message.repository';
 import { getRedisService } from '@databases/redis';
-import {
-  CassandraWriteError,
-  CassandraReadError,
-  ConversationNotFoundError,
-  UnauthorizedConversationError,
-} from '@exceptions/ChatException';
+import { CassandraWriteError, CassandraReadError, ConversationNotFoundError, UnauthorizedConversationError } from '@exceptions/ChatException';
 import { CassandraError } from '@interfaces/message.interface';
 import type {
   ConversationDto,
@@ -89,10 +84,7 @@ export class ChatService {
       query['_id'] = { $lt: new Types.ObjectId(lastConvId) };
     }
 
-    const conversations = await ConversationModel.find(query)
-      .sort({ updatedAt: -1 })
-      .limit(limit)
-      .lean<IConversation[]>();
+    const conversations = await ConversationModel.find(query).sort({ updatedAt: -1 }).limit(limit).lean<IConversation[]>();
 
     // Collect all "other" participant IDs in one batch query
     const otherIds = conversations.map(c => {
@@ -110,27 +102,20 @@ export class ChatService {
 
     const dtos: ConversationDto[] = conversations
       .map(conv => {
-        const otherId = conv.participantIds
-          .map(id => id.toString())
-          .find(id => id !== userId);
+        const otherId = conv.participantIds.map(id => id.toString()).find(id => id !== userId);
         const otherUser = otherId ? userMap.get(otherId) : undefined;
         if (!otherUser) return null;
         return toConversationDto(conv, otherUser);
       })
       .filter((c): c is ConversationDto => c !== null);
 
-    const nextCursor =
-      conversations.length === limit
-        ? conversations[conversations.length - 1]._id.toString()
-        : null;
+    const nextCursor = conversations.length === limit ? conversations[conversations.length - 1]._id.toString() : null;
 
     const result: PagedConversations = { conversations: dtos, nextCursor };
 
     // Cache first page
     if (!lastConvId) {
-      await redis
-        .cacheProfile(cacheKey, result as unknown as Record<string, unknown>, CONV_LIST_TTL)
-        .catch(() => null);
+      await redis.cacheProfile(cacheKey, result as unknown as Record<string, unknown>, CONV_LIST_TTL).catch(() => null);
     }
 
     return result;
@@ -148,16 +133,14 @@ export class ChatService {
     if (!targetUser) throw new ConversationNotFoundError(targetUserId);
 
     // Sort IDs so the unique index always matches regardless of who initiates
-    const sorted = [requesterId, targetUserId]
-      .map(id => new Types.ObjectId(id))
-      .sort((a, b) => a.toString().localeCompare(b.toString()));
+    const sorted = [requesterId, targetUserId].map(id => new Types.ObjectId(id)).sort((a, b) => a.toString().localeCompare(b.toString()));
 
     // Upsert — returns existing if already present
-    const conv = await ConversationModel.findOneAndUpdate(
+    const conv = (await ConversationModel.findOneAndUpdate(
       { participantIds: { $all: sorted, $size: 2 } },
       { $setOnInsert: { participantIds: sorted, isMutualFriends: false } },
       { upsert: true, new: true, lean: true },
-    ) as IConversation;
+    )) as IConversation;
 
     // Bust conversation list cache for both participants
     const redis = getRedisService();
@@ -180,12 +163,11 @@ export class ChatService {
 
     // Soft delete: remove this user from participantIds.
     // When only one participant remains the other still sees the conversation.
-    await ConversationModel.updateOne(
-      { _id: new Types.ObjectId(convId) },
-      { $pull: { participantIds: new Types.ObjectId(userId) } },
-    );
+    await ConversationModel.updateOne({ _id: new Types.ObjectId(convId) }, { $pull: { participantIds: new Types.ObjectId(userId) } });
 
-    await getRedisService().invalidateProfile(convListKey(userId)).catch(() => null);
+    await getRedisService()
+      .invalidateProfile(convListKey(userId))
+      .catch(() => null);
   }
 
   // ── getMessages ──────────────────────────────────────────────────────────────
@@ -210,13 +192,7 @@ export class ChatService {
 
   // ── saveMessage ──────────────────────────────────────────────────────────────
 
-  async saveMessage(data: {
-    convId: string;
-    senderId: string;
-    content: string;
-    contentType: string;
-    mediaUrl?: string | null;
-  }): Promise<MessageDto> {
+  async saveMessage(data: { convId: string; senderId: string; content: string; contentType: string; mediaUrl?: string | null }): Promise<MessageDto> {
     // Verify conversation exists and sender is a participant
     const conv = await ConversationModel.findById(data.convId).lean<IConversation>();
     if (!conv) throw new ConversationNotFoundError(data.convId);

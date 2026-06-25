@@ -20,7 +20,7 @@ export interface ProfileDTO {
   // Social
   followersCount: number;
   followingCount: number;
-  isFollowing: boolean;       // is the requesting user following this profile?
+  isFollowing: boolean; // is the requesting user following this profile?
   // Gamification
   totalMedalCount: number;
   collectorRank: CollectorRank;

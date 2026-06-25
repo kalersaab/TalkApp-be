@@ -8,11 +8,7 @@ const svc = new ShowcaseService();
 
 // ─── GET /api/showcase/inventory ─────────────────────────────────────────────
 
-export const getInventory = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const getInventory = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const data = await svc.getInventory(req.user._id.toString());
     res.json({ success: true, data });
@@ -23,11 +19,7 @@ export const getInventory = async (
 
 // ─── GET /api/showcase/catalogue ─────────────────────────────────────────────
 
-export const getCatalogue = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const getCatalogue = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const data = await svc.getFullCatalogue(req.user._id.toString());
     res.json({ success: true, data });
@@ -38,11 +30,7 @@ export const getCatalogue = async (
 
 // ─── GET /api/showcase/catalogue/:itemId ─────────────────────────────────────
 
-export const getCatalogueItem = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const getCatalogueItem = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { itemId } = req.params as { itemId: string };
     const data = await svc.getCatalogueItem(itemId, req.user._id.toString());
@@ -54,11 +42,7 @@ export const getCatalogueItem = async (
 
 // ─── POST /api/showcase/equip ─────────────────────────────────────────────────
 
-export const equipItem = async (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const equipItem = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { itemId, itemType } = req.body as EquipItemDto;
     const data = await svc.equipItem(req.user._id.toString(), itemId, itemType);

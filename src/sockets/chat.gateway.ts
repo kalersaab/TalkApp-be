@@ -29,11 +29,17 @@ const RATE = { MESSAGE: { limit: 60, window: 60 } } as const;
 // ─── Circuit breakers ─────────────────────────────────────────────────────────
 
 const cassandraBreaker = new CircuitBreaker({
-  name: 'cassandra-write', failureThreshold: 5, successThreshold: 2, timeout: 30_000,
+  name: 'cassandra-write',
+  failureThreshold: 5,
+  successThreshold: 2,
+  timeout: 30_000,
 });
 
 const redisBreaker = new CircuitBreaker({
-  name: 'redis-publish', failureThreshold: 5, successThreshold: 2, timeout: 15_000,
+  name: 'redis-publish',
+  failureThreshold: 5,
+  successThreshold: 2,
+  timeout: 15_000,
 });
 
 // ─── Typed aliases ────────────────────────────────────────────────────────────
@@ -46,23 +52,20 @@ type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerE
 export class ChatGateway {
   private io: AppServer;
   private readonly showcaseSvc = new ShowcaseService();
-  private readonly streakSvc   = new StreakService();
+  private readonly streakSvc = new StreakService();
 
   constructor(httpServer: HttpServer) {
-    this.io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(
-      httpServer,
-      {
-        path: '/socket.io',
-        cors: {
-          origin: process.env['ORIGIN']?.split(',') ?? '*',
-          credentials: true,
-        },
-        transports: ['websocket', 'polling'],
-        pingTimeout: 20_000,
-        pingInterval: 25_000,
-        maxHttpBufferSize: 1e6,
+    this.io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(httpServer, {
+      path: '/socket.io',
+      cors: {
+        origin: process.env['ORIGIN']?.split(',') ?? '*',
+        credentials: true,
       },
-    );
+      transports: ['websocket', 'polling'],
+      pingTimeout: 20_000,
+      pingInterval: 25_000,
+      maxHttpBufferSize: 1e6,
+    });
 
     // Register in the global registry so other services can emit without
     // importing this file (avoids circular dependencies)
@@ -95,15 +98,13 @@ export class ChatGateway {
   private attachAuthMiddleware(): void {
     this.io.use((socket, next) => {
       try {
-        const token =
-          (socket.handshake.auth as Record<string, string>)['token'] ??
-          (socket.handshake.query['token'] as string | undefined);
+        const token = (socket.handshake.auth as Record<string, string>)['token'] ?? (socket.handshake.query['token'] as string | undefined);
 
         if (!token) return next(new Error('AUTH_MISSING'));
 
         const payload = verifyAccessToken(token);
         socket.data.userId = payload.userId;
-        socket.data.email  = payload.email;
+        socket.data.email = payload.email;
         next();
       } catch {
         next(new Error('AUTH_INVALID'));
@@ -131,12 +132,12 @@ export class ChatGateway {
 
       socket.emit('connected', { serverTime: new Date().toISOString(), userId });
 
-      socket.on('send_message',  payload => void this.handleSendMessage(socket, payload));
-      socket.on('typing_start',  payload => void this.handleTyping(socket, payload, 'start'));
-      socket.on('typing_stop',   payload => void this.handleTyping(socket, payload, 'stop'));
-      socket.on('message_read',  payload => void this.handleMessageRead(socket, payload));
-      socket.on('heartbeat',     ()      => void this.handleHeartbeat(socket));
-      socket.on('disconnect',    reason  => void this.handleDisconnect(socket, reason));
+      socket.on('send_message', payload => void this.handleSendMessage(socket, payload));
+      socket.on('typing_start', payload => void this.handleTyping(socket, payload, 'start'));
+      socket.on('typing_stop', payload => void this.handleTyping(socket, payload, 'stop'));
+      socket.on('message_read', payload => void this.handleMessageRead(socket, payload));
+      socket.on('heartbeat', () => void this.handleHeartbeat(socket));
+      socket.on('disconnect', reason => void this.handleDisconnect(socket, reason));
     });
   }
 
@@ -164,11 +165,11 @@ export class ChatGateway {
     try {
       saved = await cassandraBreaker.call(() =>
         getMessageRepository().saveMessage({
-          convId:      payload.convId,
-          senderId:    userId,
-          content:     payload.content,
+          convId: payload.convId,
+          senderId: userId,
+          content: payload.content,
           contentType: payload.contentType ?? 'text',
-          mediaUrl:    payload.mediaUrl ?? null,
+          mediaUrl: payload.mediaUrl ?? null,
         }),
       );
     } catch (err) {
@@ -180,24 +181,22 @@ export class ChatGateway {
     // Ack to sender
     socket.emit('message_ack', {
       clientMsgId: payload.clientMsgId,
-      msgId:       saved.msgId,
-      status:      'sent',
+      msgId: saved.msgId,
+      status: 'sent',
     });
 
     // Fetch sender's equipped cosmetic items for the broadcast payload
-    const senderEquipped = await this.showcaseSvc
-      .getSenderEquipped(userId)
-      .catch(() => ({ chatBubble: null, chatBackground: null }));
+    const senderEquipped = await this.showcaseSvc.getSenderEquipped(userId).catch(() => ({ chatBubble: null, chatBackground: null }));
 
     const broadcastPayload: NewMessagePayload = {
-      msgId:          saved.msgId,
-      convId:         saved.convId,
-      senderId:       saved.senderId,
-      content:        saved.content,
-      contentType:    saved.contentType,
-      mediaUrl:       saved.mediaUrl,
-      status:         'delivered',
-      createdAt:      saved.createdAt.toISOString(),
+      msgId: saved.msgId,
+      convId: saved.convId,
+      senderId: saved.senderId,
+      content: saved.content,
+      contentType: saved.contentType,
+      mediaUrl: saved.mediaUrl,
+      status: 'delivered',
+      createdAt: saved.createdAt.toISOString(),
       senderEquipped,
     };
 
@@ -205,12 +204,12 @@ export class ChatGateway {
     try {
       await redisBreaker.call(() =>
         redis.publishMessage(payload.convId, {
-          msgId:       saved.msgId,
-          convId:      saved.convId,
-          senderId:    saved.senderId,
-          content:     saved.content,
+          msgId: saved.msgId,
+          convId: saved.convId,
+          senderId: saved.senderId,
+          content: saved.content,
           contentType: saved.contentType,
-          createdAt:   saved.createdAt.toISOString(),
+          createdAt: saved.createdAt.toISOString(),
         }),
       );
     } catch {
@@ -227,11 +226,7 @@ export class ChatGateway {
 
   // ─── typing ───────────────────────────────────────────────────────────────
 
-  private async handleTyping(
-    socket: AppSocket,
-    payload: TypingPayload,
-    type: 'start' | 'stop',
-  ): Promise<void> {
+  private async handleTyping(socket: AppSocket, payload: TypingPayload, type: 'start' | 'stop'): Promise<void> {
     socket.to(`conv:${payload.convId}`).emit('typing', {
       convId: payload.convId,
       userId: socket.data.userId,
@@ -246,7 +241,7 @@ export class ChatGateway {
       await cassandraBreaker.call(() =>
         getMessageRepository().updateMessageStatus({
           convId: payload.convId,
-          msgId:  payload.msgId,
+          msgId: payload.msgId,
           status: 'read',
         }),
       );
@@ -255,7 +250,7 @@ export class ChatGateway {
     }
 
     socket.to(`conv:${payload.convId}`).emit('read_receipt', {
-      msgId:  payload.msgId,
+      msgId: payload.msgId,
       readAt: new Date().toISOString(),
     });
   }

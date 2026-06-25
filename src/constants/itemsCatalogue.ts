@@ -130,6 +130,4 @@ export const ITEMS_CATALOGUE: CatalogueItem[] = [
 export const CATALOGUE_MAP = new Map(ITEMS_CATALOGUE.map(i => [i.id, i]));
 
 /** IDs of items every user owns by default (no achievement required) */
-export const DEFAULT_ITEM_IDS = new Set(
-  ITEMS_CATALOGUE.filter(i => i.unlockedByAchievement === null).map(i => i.id),
-);
+export const DEFAULT_ITEM_IDS = new Set(ITEMS_CATALOGUE.filter(i => i.unlockedByAchievement === null).map(i => i.id));

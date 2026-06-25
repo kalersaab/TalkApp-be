@@ -1,5 +1,4 @@
-import type { Types } from 'mongoose';
-import type { ContentType, MessageDto, PagedMessages } from './message.interface';
+import type { ContentType } from './message.interface';
 
 // ─── Conversation response shape ──────────────────────────────────────────────
 

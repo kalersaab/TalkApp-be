@@ -39,7 +39,7 @@ const CONNECTION_OPTIONS: mongoose.ConnectOptions = {
 
   // Timeouts
   serverSelectionTimeoutMS: 10_000, // give up selecting a server after 10s
-  socketTimeoutMS: 45_000,          // close idle sockets after 45s
+  socketTimeoutMS: 45_000, // close idle sockets after 45s
   connectTimeoutMS: 10_000,
 
   // Heartbeat — detect dead primaries quickly

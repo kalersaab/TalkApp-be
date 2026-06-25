@@ -3,15 +3,17 @@ import type { IUser } from '@interfaces/users.interface';
 
 const userSchema = new Schema<IUser>(
   {
-    displayName: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, trim: true, lowercase: true },
-    passwordHash: { type: String, default: null, select: false },
-    avatarUrl: { type: String, default: null },
+    displayName: { type: String, required: true },
+    username: { type: String, required: true, unique: true, sparse: true, lowercase: true },
+    email: { type: String, required: true, unique: true },
+    passwordHash: { type: String, required: false, select: false },
+    avatarUrl: { type: String },
 
     // Auth
     provider: { type: String, enum: ['local', 'google', 'facebook', 'phone'], required: true, default: 'local' },
-    googleId: { type: String, default: null, sparse: true },
-    appleId:  { type: String, default: null, sparse: true },
+    googleId: { type: String, unique: true, sparse: true },
+    appleId: { type: String, unique: true, sparse: true },
+    facebookId: { type: String, unique: true, sparse: true },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     isVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
@@ -44,14 +46,14 @@ const userSchema = new Schema<IUser>(
       },
       coordinates: { type: [Number], default: undefined }, // [lng, lat]
     },
-    bio: { type: String, default: null, maxlength: 300 },
+    bio: { type: String, maxlength: 300 },
 
     // Activity
     daysJoined: { type: Number, default: 0 },
     joinedAt: { type: Date, default: Date.now },
     currentStreak: { type: Number, default: 0 },
     longestStreak: { type: Number, default: 0 },
-    lastActiveDate: { type: Date, default: null },
+    lastActiveDate: { type: Date },
 
     // Social counts (denormalised for fast reads)
     followingCount: { type: Number, default: 0 },
@@ -65,9 +67,9 @@ const userSchema = new Schema<IUser>(
       default: 'junior',
     },
     equippedItems: {
-      avatarEffect: { type: String, default: null },
-      chatBubble: { type: String, default: null },
-      chatBackground: { type: String, default: null },
+      avatarEffect: { type: String },
+      chatBubble: { type: String },
+      chatBackground: { type: String },
     },
 
     // Presence
@@ -76,29 +78,24 @@ const userSchema = new Schema<IUser>(
 
     // Brute-force protection
     failedLoginAttempts: { type: Number, default: 0 },
-    lockUntil: { type: Date, default: null },
+    lockUntil: { type: Date },
   },
   {
     timestamps: true,
-    // Omit passwordHash from all JSON responses by default
-    toJSON: {
-      transform: (_doc, ret) => {
-        delete ret.passwordHash;
-        return ret;
-      },
-    },
   },
 );
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 
 userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ username: 1 }, { unique: true, sparse: true });
 userSchema.index({ location: '2dsphere' }, { sparse: true }); // geo queries
 userSchema.index({ nativeLang: 1 });
 userSchema.index({ learningLangs: 1 });
 userSchema.index({ isOnline: 1 });
 userSchema.index({ collectorRank: 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ isActive: 1 });
 
 export const UserModel = model<IUser>('User', userSchema);
 export default UserModel;

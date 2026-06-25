@@ -1,14 +1,18 @@
-import { SECRET_KEY } from '@/config';
-import { GetUserQueryDto } from '@/dtos/users.dto';
+import { CreateUserDto, GetUserQueryDto } from '@/dtos/users.dto';
 import { HttpException } from '@exceptions/HttpException';
-import { LoginUser, User } from '@interfaces/users.interface';
+
 import { UserModel } from '@models/users.model';
-import { compare, hash } from 'bcrypt';
-import { sign } from 'jsonwebtoken';
-import { OtpModel } from '@/models/otp.model';
-import mongoose from 'mongoose';
+
+import argon2 from 'argon2';
+
+import sendEmail from './sendEmail.service';
+import { renderEmail } from '@/template/email/renderTemplate';
+import { getOTPService } from '@services/otp.service';
+import { logger } from '@utils/logger';
 
 export class UserService {
+  private otpService = getOTPService();
+
   public async findUserById(userId: any) {
     const findUser = UserModel.findById(userId);
     if (!findUser) throw new HttpException(409, "User doesn't exist");
@@ -17,183 +21,237 @@ export class UserService {
   }
 
   public async findAllUser(query: GetUserQueryDto) {
-    const pageIndex = parseInt(query.page, 10) || 1;
-    const pageSize = parseInt(query.limit, 10) || 10;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 10;
 
-    const searchCriteria: { isActive?: boolean; [key: string]: any } = {};
+    const filter: any = {};
 
-    if (query?.isActive === true) {
-      searchCriteria.isActive = true;
+    if (query.isActive !== undefined) {
+      filter.isActive = query.isActive;
     }
-    if (query?.isActive === false) {
-      searchCriteria.isActive = false;
-    }
-    if (query?.keyword) {
-      searchCriteria['$or'] = [
+
+    if (query.keyword?.trim()) {
+      filter.$or = [
         {
-          name: { $regex: `${query.keyword?.trim()}`, $options: 'i' },
+          username: {
+            $regex: query.keyword.trim(),
+            $options: 'i',
+          },
         },
         {
-          email: { $regex: `${query.keyword?.trim()}`, $options: 'i' },
+          email: {
+            $regex: query.keyword.trim(),
+            $options: 'i',
+          },
         },
       ];
     }
-    const user = await UserModel.aggregate([
-      { $match: searchCriteria },
-      { $sort: { createdAt: -1 } },
-      { $project: { password: 0 } },
-      {
-        $facet: {
-          data: [{ $skip: (pageIndex - 1) * pageSize }, { $limit: pageSize }],
-          count: [{ $count: 'total' }],
-          isActiveCount: [{ $match: { isActive: true } }, { $count: 'total' }],
-          notActiveCount: [{ $match: { isActive: false } }, { $count: 'total' }],
-        },
-      },
+    const [users, total, activeCount, inactiveCount] = await Promise.all([
+      UserModel.find(filter)
+        .select('-passwordHash')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+
+      UserModel.countDocuments(filter),
+
+      UserModel.countDocuments({ isActive: true }),
+
+      UserModel.countDocuments({ isActive: false }),
     ]);
+
     return {
-      data: user[0]?.data,
-      count: user[0]?.count[0]?.total,
-      isActiveCount: user[0]?.isActiveCount[0]?.total || 0,
-      notActiveCount: user[0]?.notActiveCount[0]?.total || 0,
+      data: users,
+      count: total,
+      isActiveCount: activeCount,
+      notActiveCount: inactiveCount,
     };
   }
 
-  public async createUser(userData: User) {
-    if(!userData){
-      throw new HttpException(400,"empty payload")
-    }
-    const { email, password, name } = userData;
-    const findUser = await UserModel.findOne({ email: email });
-    if (findUser) throw new HttpException(409, `This email ${userData.email} already exists`);
+  public async createUser(userData: CreateUserDto) {
+    if (!userData) throw new HttpException(400, 'empty payload');
 
-    const hashPassword = await hash(password, 10);
-    const createUserData = await UserModel.create({
-      ...userData,
-      password: hashPassword,
+    const { email, passwordHash, displayName, gender, dateOfBirth, nativeLang, learningLangs, proficiencyLevels } = userData;
+    const lowerEmail = email.toLowerCase();
+
+    const [findUser, hashedPassword] = await Promise.all([
+      UserModel.findOne({ email: lowerEmail }, { _id: 1 }).lean(),
+      argon2.hash(passwordHash, {
+        type: argon2.argon2id,
+        memoryCost: 16384,
+        timeCost: 2,
+      }),
+    ]);
+
+    if (findUser) throw new HttpException(409, `This email ${email} already exists`);
+
+    const nameParts = displayName.trim().split(' ');
+    const baseUsername = (nameParts.length > 1 ? nameParts[0] : nameParts[0].slice(0, 5)).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const timestamp = Date.now().toString().slice(-4);
+    const username = `ta@${baseUsername}${timestamp}`;
+
+    const user = await UserModel.create({
+      displayName: displayName || email.split('@')[0],
+      username,
+      email: lowerEmail,
+      gender,
+      dateOfBirth,
+      passwordHash: hashedPassword,
+      provider: 'local',
+      nativeLang: nativeLang || 'en',
+      learningLangs: learningLangs || [],
+      proficiencyLevels: proficiencyLevels || {},
       isVerified: false,
+      location: { coordinates: [0, 0] },
     });
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const otpExpires = new Date(Date.now() + 15 * 60 * 1000);
-    await OtpModel.create({
-      email,
-      otp,
-      otpExpires,
-    });
-    return {...createUserData, otp};
+    this.handleOnboardingSideEffects(lowerEmail, displayName).catch(err =>
+      logger.error(`[Users] Background onboarding tasks failed for ${lowerEmail}: ${err}`),
+    );
+
+    // 5. Respond to Postman instantly!
+    return user;
   }
 
-  public async verifyUser(userData) {
+  private async handleOnboardingSideEffects(lowerEmail: string, displayName: string): Promise<void> {
+    try {
+      // 1. Generate and store OTP inside Redis (Happens while user app transitions screens)
+      const otp = await this.otpService.generateAndStoreOTP(lowerEmail);
+
+      // 2. Transmit through your SMTP network gateway
+      await sendEmail(
+        [lowerEmail],
+        `Verify Your Email for TalkApp - Your OTP Code`,
+        renderEmail({
+          data: {
+            name: displayName || 'User',
+            otp: otp,
+            appName: 'TalkApp',
+            supportEmail: 'support@TalkApp.com',
+            expiryMinutes: 15,
+          },
+          templatePath: 'src/template/verify.hbs',
+        }),
+        [],
+      );
+
+      logger.info(`[Users] Asynchronous onboarding sequence successfully finalized for ${lowerEmail}`);
+    } catch (err) {
+      logger.error(`[Users] Critical failure inside background onboarding pipeline for ${lowerEmail}: ${err}`);
+    }
+  }
+
+  public async verifyUser(userData: { email: string; otp: string }) {
     const { email, otp } = userData;
-    const otpDoc: any = await OtpModel.findOne({ email: email, otp: otp }).exec();
-    if (!otpDoc) {
-      throw new HttpException(400, 'Invalid OTP');
+    const lowerEmail = email.toLowerCase();
+
+    // Verify OTP using secure OTP service
+    const isValid = await this.otpService.verifyOTP(lowerEmail, otp);
+
+    if (!isValid) {
+      throw new HttpException(400, 'Invalid or expired OTP');
     }
 
-    const now = new Date();
+    const user = await UserModel.updateOne(
+      { email: lowerEmail, isVerified: false }, // skip already-verified users
+      { $set: { isVerified: true, isActive: true } },
+    );
 
-    if (new Date(otpDoc.otpExpires) < now) {
-      await OtpModel.deleteOne({ _id: otpDoc._id });
-      throw new HttpException(400, 'OTP has expired');
-    }
-
-    const User = await UserModel.findOneAndUpdate({ email: email }, { isVerified: true }, { new: true });
-    User?.save();
-
-    if (!User) {
-      throw new Error('User not found');
-    }
-    await OtpModel.deleteOne({ _id: otpDoc._id });
-    return User;
-  }
-
-  public async resendOtp(email: string) {
-    const user = await UserModel.findOne({ email: email });
     if (!user) {
       throw new HttpException(404, 'User not found');
     }
-    if (user?.isVerified === true) {
-      return { error: 'Email is already verified', status: 400 };
-    }
 
-    await OtpModel.deleteMany({ email }).exec();
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpires = new Date(Date.now() + 15 * 60 * 1000);
-    await OtpModel.create({
-      email,
-      otp,
-      otpExpires: otpExpires,
-    });
-      return otp
+    logger.info(`[Users] Email verified for ${lowerEmail}`);
+    return user;
   }
 
-  public async login(userData: LoginUser) {
-    const { email, password } = userData;
-    const findUser = await UserModel.findOne({
-      email: email,
+  public async resendOtp(email: string) {
+    const lowerEmail = email.toLowerCase();
+
+    const [user, otp] = await Promise.all([
+      UserModel.findOne(
+        { email: lowerEmail },
+        { isVerified: 1, displayName: 1 }, // lean projection
+      ).lean(),
+      this.otpService.generateAndStoreOTP(lowerEmail),
+    ]);
+
+    if (!user) throw new HttpException(404, 'User not found');
+    if (user.isVerified) throw new HttpException(400, 'Email already verified');
+
+    // Email is fully off the critical path
+    setImmediate(async () => {
+      try {
+        await sendEmail(
+          [lowerEmail],
+          `Verify Your Email for TalkApp - Your OTP Code`,
+          renderEmail({
+            data: {
+              name: user.displayName,
+              otp,
+              appName: 'TalkApp',
+              supportEmail: 'support@TalkApp.com',
+              expiryMinutes: 15,
+            },
+            templatePath: 'src/template/verify.hbs',
+          }),
+          [],
+        );
+        logger.info(`[Users] OTP resent to ${lowerEmail}`);
+      } catch (err) {
+        logger.error(`[Users] Failed to resend OTP to ${lowerEmail}: ${err}`);
+        // TODO: push to BullMQ retry queue here
+      }
     });
 
-    if (!findUser) {
-      throw new HttpException(404, 'User not found');
-    }
-    if (!findUser.isVerified) {
-      throw new HttpException(400, 'User is not verified');
-    }
-    if (!findUser.isActive) {
-      throw new HttpException(403, 'User is not active');
-    }
-
-    const isMatch = await compare(password, findUser.password);
-    if (!isMatch) {
-      throw new HttpException(401, 'Invalid credentials');
-    }
-
-    const token = sign({ _id: findUser._id, email: findUser.email, role: findUser.role }, SECRET_KEY as any, {
-      expiresIn: '60d',
-    });
-    const response = {
-      user: {
-        id: findUser._id,
-        name: findUser.name,
-        email: findUser.email,
-        avatar: findUser.avatar,
-        role: findUser.role,
-      },
-      token: token,
+    return {
+      message: 'OTP sent successfully to your email',
+      email: lowerEmail,
     };
-    return response;
   }
-  public async meApi(userId: string) {
-    if (!userId) {
-      throw new HttpException(400, 'User ID is required');
-    }
-    const objectId = new mongoose.Types.ObjectId(userId);
-    const findUserData = await UserModel.aggregate([
-      { $match: { _id: objectId } },
+
+  public async updateUser(userId: any, userData: any) {
+    if (!userId) throw new HttpException(400, 'User ID is required');
+
+    const { bio, dateOfBirth, nativeLang, learningLangs, proficiencyLevels, location } = userData;
+
+    const updatePayload: Record<string, any> = {};
+    if (bio !== undefined) updatePayload.bio = bio;
+    if (dateOfBirth !== undefined) updatePayload.dateOfBirth = dateOfBirth;
+    if (nativeLang !== undefined) updatePayload.nativeLang = nativeLang;
+    if (learningLangs !== undefined) updatePayload.learningLangs = learningLangs;
+    if (proficiencyLevels !== undefined) updatePayload.proficiencyLevels = proficiencyLevels;
+    if (location !== undefined) updatePayload.location = location;
+
+    if (Object.keys(updatePayload).length === 0) return null;
+
+    // 4. LATENCY FIX: Execute the update with lean() to bypass heavy Mongoose overhead
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: updatePayload }, // Using $set guarantees only the specified properties change
       {
-        $project: {
-          password: 0,
-          provider: 0,
-          isVerified: 0,
+        new: true,
+        runValidators: false,
+        projection: {
+          bio: 1,
+          dateOfBirth: 1,
+          nativeLang: 1,
+          learningLangs: 1,
+          proficiencyLevels: 1,
+          location: 1,
         },
       },
-    ]);
-    return findUserData;
-  }
-  public async updateUser(userId: any, userData: any) {
-    const findUser = await UserModel.findById(userId);
-    if (!findUser) throw new HttpException(409, "User doesn't exist");
+    ).lean();
 
-    const hashedPassword = await hash(userData.password, 10);
-    userData = { ...userData, password: hashedPassword };
-    const updatedUser = await UserModel.findByIdAndUpdate(userId, userData, { new: true }).select('-password');
+    if (!updatedUser) throw new HttpException(404, 'User not found');
+
     return updatedUser;
   }
 
   public async deleteUser(userId: number) {
     const findUser = await UserModel.findByIdAndDelete(userId);
-    if (!findUser) throw new HttpException(404, 'Merchent not found');
+    if (!findUser) throw new HttpException(404, 'User not found');
     return findUser;
   }
 }
