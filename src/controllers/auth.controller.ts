@@ -145,4 +145,50 @@ export class AuthController {
       next(err);
     }
   };
+
+  // ─── POST /api/auth/forgot-password ───────────────────────────────────────────
+
+  public forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { email } = req.body as { email?: string };
+
+      if (!email) {
+        res.status(400).json({ success: false, message: 'Email is required' });
+        return;
+      }
+
+      const result = await this.svc.forgotPassword(email);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── POST /api/auth/reset-password ────────────────────────────────────────────
+
+  public resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { email, otp, newPassword } = req.body as { email?: string; otp?: string; newPassword?: string };
+
+      if (!email || !otp || !newPassword) {
+        res.status(400).json({ success: false, message: 'Email, OTP, and new password are required' });
+        return;
+      }
+
+      const result = await this.svc.resetPassword(email, otp, newPassword);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

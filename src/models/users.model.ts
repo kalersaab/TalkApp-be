@@ -6,7 +6,7 @@ const userSchema = new Schema<IUser>(
     displayName: { type: String, required: true },
     username: { type: String, required: true, unique: true, sparse: true, lowercase: true },
     email: { type: String, required: true, unique: true },
-    passwordHash: { type: String, required: false, select: false },
+    passwordHash: { type: String, required: false, select: false, sparse: true },
     avatarUrl: { type: String },
 
     // Auth
@@ -16,7 +16,7 @@ const userSchema = new Schema<IUser>(
     facebookId: { type: String, unique: true, sparse: true },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     isVerified: { type: Boolean, default: false },
-    isActive: { type: Boolean, default: true },
+    isActive: { type: Boolean, default: false },
 
     // Language learning
     nativeLang: { type: String, required: true, default: 'en' },
@@ -36,15 +36,15 @@ const userSchema = new Schema<IUser>(
     },
 
     // Profile
-    gender: { type: String, enum: ['male', 'female', 'other'], default: null },
-    dateOfBirth: { type: Date, default: null },
+    gender: { type: String, enum: ['male', 'female', 'other'], sparse: true },
+    dateOfBirth: { type: Date, sparse: true },
     location: {
       type: {
         type: String,
         enum: ['Point'],
         default: 'Point',
       },
-      coordinates: { type: [Number], default: undefined }, // [lng, lat]
+      coordinates: { type: [Number], default: undefined, sparse: true }, // [lng, lat]
     },
     bio: { type: String, maxlength: 300 },
 

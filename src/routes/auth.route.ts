@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { LoginDto, GoogleAuthDto, AppleAuthDto } from '@dtos/auth.dto';
+import { LoginDto, GoogleAuthDto, AppleAuthDto, ForgotPasswordDto, ResetPasswordDto } from '@dtos/auth.dto';
 import type { Routes } from '@interfaces/routes.interface';
 import { AuthMiddleware } from '@middlewares/auth.middleware';
 import { loginLimiter, refreshLimiter } from '@middlewares/rateLimiter';
@@ -34,6 +34,12 @@ class AuthRoute implements Routes {
 
     // POST /api/auth/logout
     this.router.post(`${this.path}/logout`, this.auth.logout);
+
+    // POST /api/auth/forgot-password
+    this.router.post(`${this.path}/forgot-password`, loginLimiter, validationMiddleware(ForgotPasswordDto, 'body'), this.auth.forgotPassword);
+
+    // POST /api/auth/reset-password
+    this.router.post(`${this.path}/reset-password`, loginLimiter, validationMiddleware(ResetPasswordDto, 'body'), this.auth.resetPassword);
   }
 }
 

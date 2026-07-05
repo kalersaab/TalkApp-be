@@ -38,3 +38,27 @@ export class AppleAuthDto {
   @IsNotEmpty({ message: 'Apple identity token is required' })
   public identityToken: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail({}, { message: 'Invalid email address' })
+  public email: string;
+}
+
+export class ResetPasswordDto {
+  @IsEmail({}, { message: 'Invalid email address' })
+  public email: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'OTP is required' })
+  @Matches(/^\d{6}$/, { message: 'OTP must be a 6-digit number' })
+  public otp: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Password is required' })
+  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  @MaxLength(72, { message: 'Password too long' })
+  @Matches(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
+  @Matches(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
+  @Matches(/[0-9]/, { message: 'Password must contain at least one number' })
+  public newPassword: string;
+}

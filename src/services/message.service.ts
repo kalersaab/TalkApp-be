@@ -11,13 +11,7 @@ function cacheKey(roomId: string, limit: number): string {
 }
 
 export class MessageService {
-  public async saveMessage(
-    senderId: string,
-    roomId: string,
-    recieverId: string,
-    content: string,
-    isBinary: boolean,
-  ): Promise<Message> {
+  public async saveMessage(senderId: string, roomId: string, recieverId: string, content: string, isBinary: boolean): Promise<Message> {
     const messageId = CassandraTypes.Uuid.random();
     const createdAt = new Date();
 
@@ -26,11 +20,7 @@ export class MessageService {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
 
-    await cassandraClient.execute(
-      query,
-      [roomId, createdAt, messageId, senderId, recieverId, content, isBinary],
-      { prepare: true },
-    );
+    await cassandraClient.execute(query, [roomId, createdAt, messageId, senderId, recieverId, content, isBinary], { prepare: true });
 
     logger.info(`Message saved [room=${roomId}, id=${messageId}]`);
 

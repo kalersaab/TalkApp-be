@@ -79,6 +79,21 @@ class App {
     // Initialise Socket.io gateway after all data stores are ready
     initChatGateway(this.server);
     logger.info('[App] ChatGateway initialised');
+
+    // 🚀 PERFORMANCE: Pre-warm OAuth certificate caches
+    await this.bootstrapAuthProviders();
+  }
+
+  private async bootstrapAuthProviders(): Promise<void> {
+    try {
+      // Dynamically import to avoid circular dependencies
+      const { bootstrapAuthProviders } = await import('@services/auth.service');
+      await bootstrapAuthProviders();
+      logger.info('[App] OAuth providers bootstrapped successfully');
+    } catch (err) {
+      logger.warn(`[App] OAuth bootstrap failed: ${(err as Error).message}`);
+      // Non-fatal error - OAuth will work normally, just with slightly higher first-call latency
+    }
   }
 
   private initializeMiddlewares(): void {
