@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 
-import { LoginDto, GoogleAuthDto, AppleAuthDto } from '@dtos/auth.dto';
+import { LoginDto, GoogleAuthDto, AppleAuthDto, SignInWithEmailDto, VerifyEmailTokenDto } from '@dtos/auth.dto';
 import type { RequestWithUser } from '@interfaces/auth.interface';
 import { AuthService } from '@services/auth.service';
 
@@ -77,6 +77,7 @@ export class AuthController {
           isNewUser: result.isNewUser,
         },
       });
+      
     } catch (err) {
       next(err);
     }
@@ -186,6 +187,74 @@ export class AuthController {
         success: true,
         data: result,
         message: result.message,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── POST /api/auth/signin-email ──────────────────────────────────────────────
+
+  public signInWithEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { email } = req.body as { email?: string };
+
+      if (!email) {
+        res.status(400).json({ success: false, message: 'Email is required' });
+        return;
+      }
+
+      const result = await this.svc.signInWithEmail(email);
+
+      // For new users, don't set cookie
+      if ('isNewUser' in result && result.isNewUser) {
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: 'Email verified. Please complete your profile.',
+        });
+        return;
+      }
+
+      // For existing users, set refresh token cookie
+      if ('refreshToken' in result) {
+        this.setRefreshCookie(res, result.refreshToken);
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: 'Sign-in successful',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── POST /api/auth/verify-email-token ────────────────────────────────────────
+
+  public verifyEmailToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { token } = req.body as { token?: string };
+
+      if (!token) {
+        res.status(400).json({ success: false, message: 'Token is required' });
+        return;
+      }
+
+      const result = await this.svc.verifyEmailToken(token);
+
+      this.setRefreshCookie(res, result.refreshToken);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          user: result.user,
+          isNewUser: result.isNewUser,
+        },
+        message: 'Email verified successfully',
       });
     } catch (err) {
       next(err);

@@ -3,6 +3,8 @@ import { Router } from 'express';
 import type { Routes } from '@interfaces/routes.interface';
 import { AuthMiddleware } from '@middlewares/auth.middleware';
 import { avatarUpload } from '@middlewares/upload';
+import validationMiddleware from '@middlewares/validation.middleware';
+import { CompleteProfileDto, UpdateProfileDto } from '@dtos/profile.dto';
 import {
   getProfile,
   getMyProfile,
@@ -16,6 +18,7 @@ import {
   unfollowUser,
   likePost,
   unlikePost,
+  completeProfile,
 } from '@controllers/profile.controller';
 
 export class ProfileRoute implements Routes {
@@ -29,9 +32,12 @@ export class ProfileRoute implements Routes {
   private initializeRoutes(): void {
     this.router.use(AuthMiddleware);
 
+    // ── Profile onboarding (for new Google Sign-In users) ───────────────────
+    this.router.post(`${this.path}/complete`, validationMiddleware(CompleteProfileDto, 'body'), completeProfile);
+
     // ── Own profile ──────────────────────────────────────────────────────────
     this.router.get(`${this.path}/me`, getMyProfile);
-    this.router.patch(`${this.path}/me`, updateProfile);
+    this.router.patch(`${this.path}/me`, validationMiddleware(UpdateProfileDto, 'body', true), updateProfile);
     this.router.post(`${this.path}/me/avatar`, avatarUpload, uploadAvatar);
 
     // ── Any user's profile ───────────────────────────────────────────────────

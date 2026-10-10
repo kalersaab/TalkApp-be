@@ -477,6 +477,125 @@ export class AuthService {
     await this.redis.invalidateRefreshTokenSession(tokenHash);
   }
 
+  // ── signin with email ────────────────────────────────────────────────────────
+
+  /**
+   * Email-only sign-in endpoint
+   * For new users: Returns isNewUser: true with email
+   * For existing users: Returns tokens with isNewUser: false
+   */
+  public async signInWithEmail(email: string): Promise<OAuthResult | { isNewUser: boolean; email: string; message: string }> {
+    if (!email) throw new HttpException(400, 'Email is required');
+
+    const lowerEmail = email.toLowerCase();
+    const existingUser = await UserModel.findOne({ email: lowerEmail }).lean().exec();
+
+    if (!existingUser) {
+      // New user: Return indicator to proceed with profile creation
+      logger.info(`[Auth] New user sign-in attempt with email ${lowerEmail}`);
+      return {
+        isNewUser: true,
+        email: lowerEmail,
+        message: 'Please complete your profile',
+      };
+    }
+
+    // Existing user: Generate tokens
+    const { accessToken, refreshToken } = await this.issueTokenPair(existingUser._id.toString(), existingUser.email);
+
+    logger.info(`[Auth] User signed in with email ${existingUser._id}`);
+    return {
+      accessToken,
+      refreshToken,
+      user: sanitizeUser(existingUser as any),
+      isNewUser: false,
+    };
+  }
+
+  // ── verify email token ───────────────────────────────────────────────────────
+
+  /**
+   * Verify email token and complete profile creation for new users
+   * Token contains: userId (for new user), email
+   */
+  public async verifyEmailToken(token: string): Promise<{ user: Omit<IUser, 'passwordHash'>; accessToken: string; refreshToken: string; isNewUser: boolean }> {
+    if (!token) throw new HttpException(400, 'Token is required');
+
+    try {
+      // Verify and decode the token (using same secret as JWT tokens)
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+
+      const { email, userId, isNew } = decoded;
+
+      if (!email) throw new HttpException(401, 'Invalid token: missing email');
+
+      const lowerEmail = email.toLowerCase();
+
+      // For new users: create minimal user account
+      if (isNew) {
+        const baseUsername = lowerEmail.split('@')[0].slice(0, 10);
+        const username = `ta@${baseUsername}${Math.floor(10000 + Math.random() * 90000)}`;
+
+        const newUser = await UserModel.create({
+          displayName: baseUsername,
+          username,
+          email: lowerEmail,
+          passwordHash: null,
+          provider: 'email',
+          isVerified: true,
+          isActive: true,
+          nativeLang: 'en',
+          learningLangs: [],
+          proficiencyLevels: {},
+          location: { type: 'Point', coordinates: [0, 0] },
+        });
+
+        // Create associated documents
+        createUserDocuments(newUser._id.toString()).catch(err => {
+          logger.error(`[Auth] Failed to create docs: ${(err as Error).message}`);
+        });
+
+        const { accessToken, refreshToken } = await this.issueTokenPair(newUser._id.toString(), newUser.email);
+
+        logger.info(`[Auth] New user created via email verification ${newUser._id}`);
+        return {
+          user: sanitizeUser(newUser as any),
+          accessToken,
+          refreshToken,
+          isNewUser: true,
+        };
+      }
+
+      // For existing users: verify they exist and issue tokens
+      const user = await UserModel.findOne({ email: lowerEmail }).lean().exec();
+
+      if (!user) {
+        throw new HttpException(404, 'User not found');
+      }
+
+      if (!user.isActive) {
+        throw new HttpException(403, 'User is not active');
+      }
+
+      const { accessToken, refreshToken } = await this.issueTokenPair(user._id.toString(), user.email);
+
+      logger.info(`[Auth] User verified via email token ${user._id}`);
+      return {
+        user: sanitizeUser(user as any),
+        accessToken,
+        refreshToken,
+        isNewUser: false,
+      };
+    } catch (err: any) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+
+      logger.warn(`[Auth] Email token verification failed: ${(err as Error).message}`);
+      throw new HttpException(401, 'Invalid or expired token');
+    }
+  }
+
   // ── forgot password ──────────────────────────────────────────────────────────
 
   public async forgotPassword(email: string): Promise<{ message: string }> {

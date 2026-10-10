@@ -96,6 +96,7 @@ userSchema.index({ isOnline: 1 });
 userSchema.index({ collectorRank: 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ isActive: 1 });
+userSchema.index({ 'proficiencyLevels': 1 }, { sparse: true }); // Index for language proficiency queries
 
 export const UserModel = model<IUser>('User', userSchema);
 export default UserModel;

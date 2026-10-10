@@ -77,6 +77,68 @@ function toBasicUserDTO(user: IUser): BasicUserDTO {
 // ─── ProfileService ───────────────────────────────────────────────────────────
 
 export class ProfileService {
+  // ── completeProfile ──────────────────────────────────────────────────────────
+
+  /**
+   * Complete profile for new Google Sign-In users
+   * Updates the minimally-created user with full profile information
+   */
+  async completeProfile(userId: string, profileData: import('@dtos/profile.dto').CompleteProfileDto): Promise<ProfileDTO> {
+    const { username, gender, dateOfBirth, nativeLang, learningLangs, proficiencyLevels, bio, location } = profileData;
+
+    // Check if username is already taken
+    const existingUser = await UserModel.findOne({ username: username.toLowerCase() }).lean();
+    if (existingUser && existingUser._id.toString() !== userId) {
+      throw new HttpException(409, 'Username already taken');
+    }
+
+    // Validate learning languages
+    if (learningLangs.length === 0) {
+      throw new HttpException(400, 'At least one learning language is required');
+    }
+
+    if (learningLangs.length > 5) {
+      throw new HttpException(400, 'Maximum 5 learning languages allowed');
+    }
+
+    // Update user with profile data
+    const updateData: Partial<IUser> = {
+      username: username.toLowerCase(),
+      nativeLang,
+      learningLangs,
+      proficiencyLevels: proficiencyLevels || {},
+    };
+
+    if (gender) updateData.gender = gender as any;
+    if (dateOfBirth) updateData.dateOfBirth = new Date(dateOfBirth);
+    if (bio) updateData.bio = bio;
+    if (location && location.length === 2) {
+      updateData.location = {
+        type: 'Point',
+        coordinates: location, // [longitude, latitude]
+      };
+    }
+
+    const user = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true }
+    ).lean();
+
+    if (!user) {
+      throw new HttpException(404, 'User not found');
+    }
+
+    // Invalidate profile cache
+    const redis = getRedisService();
+    await redis.invalidateProfile(userId);
+
+    logger.info(`[Profile] Profile completed for user ${userId}`);
+
+    // Return the complete profile
+    return this.getProfile(userId, userId);
+  }
+
   // ── getProfile ───────────────────────────────────────────────────────────────
 
   async getProfile(targetUserId: string, requesterId: string): Promise<ProfileDTO> {
