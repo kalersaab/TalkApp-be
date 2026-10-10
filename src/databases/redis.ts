@@ -36,7 +36,7 @@ export const KEYS = {
 // ─── TTL constants (seconds) ──────────────────────────────────────────────────
 
 export const TTL = {
-  PROFILE: 5 * 60, // 5 minutes
+  PROFILE: 10 * 24 * 3600, // 10days
   TRANSLATION: 30 * 24 * 3600, // 30 days
   INVENTORY: 10 * 60, // 10 minutes
   STREAK: 25 * 3600, // 25 hours
@@ -59,6 +59,7 @@ const COMMON_OPTIONS = {
   password: REDIS_PASSWORD || undefined,
   enableReadyCheck: true,
   maxRetriesPerRequest: 3,
+  commandTimeout: 5000, // 5s timeout for any Redis command
   retryStrategy: (times: number): number | null => {
     if (times > 10) {
       logger.error('[Redis] Max reconnect attempts reached');

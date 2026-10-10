@@ -10,6 +10,9 @@ import { getRedisService } from '@databases/redis';
 import { getMessageRepository } from '@repositories/message.repository';
 import { ShowcaseService } from '@services/showcase.service';
 import { StreakService } from '@services/streak.service';
+import { GroupChatService } from '@services/groupChat.service';
+import { GroupConversationModel } from '@models/groupConversation.model';
+import { ConversationModel } from '@models/conversation.model';
 import { registerGateway } from '@sockets/gateway.registry';
 import type {
   ClientToServerEvents,
@@ -20,6 +23,8 @@ import type {
   TypingPayload,
   MessageReadPayload,
   NewMessagePayload,
+  JoinGroupPayload,
+  LeaveGroupPayload,
 } from '@interfaces/socket.interface';
 
 // ─── Rate limit config ────────────────────────────────────────────────────────
@@ -53,6 +58,7 @@ export class ChatGateway {
   private io: AppServer;
   private readonly showcaseSvc = new ShowcaseService();
   private readonly streakSvc = new StreakService();
+  private readonly groupSvc = new GroupChatService();
 
   constructor(httpServer: HttpServer) {
     this.io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(httpServer, {
@@ -136,6 +142,8 @@ export class ChatGateway {
       socket.on('typing_start', payload => void this.handleTyping(socket, payload, 'start'));
       socket.on('typing_stop', payload => void this.handleTyping(socket, payload, 'stop'));
       socket.on('message_read', payload => void this.handleMessageRead(socket, payload));
+      socket.on('join_group', payload => void this.handleJoinGroup(socket, payload));
+      socket.on('leave_group', payload => void this.handleLeaveGroup(socket, payload));
       socket.on('heartbeat', () => void this.handleHeartbeat(socket));
       socket.on('disconnect', reason => void this.handleDisconnect(socket, reason));
     });
@@ -158,6 +166,35 @@ export class ChatGateway {
         message: `Too many messages. Try again after ${new Date(rl.resetAt).toISOString()}`,
       });
       return;
+    }
+
+    // Check if this is a group or 1-on-1 conversation
+    const isGroup = await this.isGroupConversation(payload.convId);
+
+    // For groups, verify membership and permissions
+    if (isGroup) {
+      const isMember = await this.groupSvc.checkMembership(payload.convId, userId);
+      if (!isMember) {
+        socket.emit('error', { code: 'NOT_MEMBER', message: 'You are not a member of this group' });
+        return;
+      }
+
+      // Check if only admins can post
+      const group = await GroupConversationModel.findById(payload.convId).select('settings').lean();
+      if (group?.settings.onlyAdminsCanPost) {
+        const isAdmin = await this.groupSvc.isAdmin(payload.convId, userId);
+        if (!isAdmin) {
+          socket.emit('error', { code: 'ADMIN_ONLY', message: 'Only admins can post in this group' });
+          return;
+        }
+      }
+    } else {
+      // For 1-on-1, verify user is a participant
+      const conv = await ConversationModel.findById(payload.convId).select('participantIds').lean();
+      if (!conv || !conv.participantIds.some(id => id.toString() === userId)) {
+        socket.emit('error', { code: 'NOT_PARTICIPANT', message: 'You are not a participant in this conversation' });
+        return;
+      }
     }
 
     // Persist to Cassandra
@@ -217,8 +254,11 @@ export class ChatGateway {
       socket.to(`conv:${payload.convId}`).emit('new_message', broadcastPayload);
     }
 
-    // Broadcast to conversation room on this node
+    // Broadcast to conversation/group room on this node
     this.io.to(`conv:${payload.convId}`).emit('new_message', broadcastPayload);
+
+    // Update last message in MongoDB (for both 1-on-1 and groups)
+    void this.updateLastMessage(payload.convId, userId, saved.content, saved.createdAt, isGroup);
 
     // Update streak (non-blocking)
     void this.streakSvc.checkAndUpdateStreak(userId).catch(() => null);
@@ -311,6 +351,96 @@ export class ChatGateway {
 
   leaveConversation(socketId: string, convId: string): void {
     void this.io.sockets.sockets.get(socketId)?.leave(`conv:${convId}`);
+  }
+
+  // ─── Group Management ─────────────────────────────────────────────────────
+
+  private async handleJoinGroup(socket: AppSocket, payload: JoinGroupPayload): Promise<void> {
+    const { userId } = socket.data;
+    const { groupId } = payload;
+
+    try {
+      const isMember = await this.groupSvc.checkMembership(groupId, userId);
+      if (!isMember) {
+        socket.emit('error', { code: 'NOT_MEMBER', message: 'You are not a member of this group' });
+        return;
+      }
+
+      await socket.join(`conv:${groupId}`);
+      logger.info(`[ChatGateway] User ${userId} joined group room ${groupId}`);
+    } catch (err) {
+      socket.emit('error', { code: 'JOIN_FAILED', message: 'Failed to join group' });
+    }
+  }
+
+  private async handleLeaveGroup(socket: AppSocket, payload: LeaveGroupPayload): Promise<void> {
+    const { groupId } = payload;
+    await socket.leave(`conv:${groupId}`);
+    logger.info(`[ChatGateway] User ${socket.data.userId} left group room ${groupId}`);
+  }
+
+  // ─── Helper Methods ───────────────────────────────────────────────────────
+
+  private async isGroupConversation(convId: string): Promise<boolean> {
+    try {
+      const group = await GroupConversationModel.findById(convId).select('_id').lean();
+      return !!group;
+    } catch {
+      return false;
+    }
+  }
+
+  private async updateLastMessage(convId: string, senderId: string, content: string, timestamp: Date, isGroup: boolean): Promise<void> {
+    try {
+      const lastMessage = {
+        text: content.substring(0, 100),
+        senderId,
+        timestamp,
+      };
+
+      if (isGroup) {
+        await GroupConversationModel.updateOne({ _id: convId }, { $set: { lastMessage, updatedAt: timestamp } });
+      } else {
+        await ConversationModel.updateOne({ _id: convId }, { $set: { lastMessage, updatedAt: timestamp } });
+      }
+    } catch (err) {
+      logger.warn(`[ChatGateway] Failed to update last message: ${(err as Error).message}`);
+    }
+  }
+
+  // ─── Group Event Broadcasting ─────────────────────────────────────────────
+
+  broadcastGroupMemberJoined(groupId: string, userId: string, displayName: string, avatarUrl: string | null): void {
+    this.io.to(`conv:${groupId}`).emit('group_member_joined', {
+      groupId,
+      userId,
+      displayName,
+      avatarUrl,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  broadcastGroupMemberLeft(groupId: string, userId: string, displayName: string, avatarUrl: string | null): void {
+    this.io.to(`conv:${groupId}`).emit('group_member_left', {
+      groupId,
+      userId,
+      displayName,
+      avatarUrl,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  broadcastGroupUpdated(
+    groupId: string,
+    updatedBy: string,
+    updates: { name?: string; description?: string; avatarUrl?: string; settings?: Record<string, boolean> },
+  ): void {
+    this.io.to(`conv:${groupId}`).emit('group_updated', {
+      groupId,
+      ...updates,
+      updatedBy,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   get server(): AppServer {

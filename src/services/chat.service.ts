@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 
 import { ConversationModel } from '@models/conversation.model';
+import { GroupConversationModel } from '@models/groupConversation.model';
 import { UserModel } from '@models/users.model';
 import { getMessageRepository } from '@repositories/message.repository';
 import { getRedisService } from '@databases/redis';
@@ -175,12 +176,21 @@ export class ChatService {
   async getMessages(input: GetMessagesInput): Promise<PagedMessages> {
     const { convId, requesterId, limit = 50, beforeMsgId } = input;
 
-    // Authorisation check — must be a participant
-    const conv = await ConversationModel.findById(convId).lean<IConversation>();
-    if (!conv) throw new ConversationNotFoundError(convId);
+    // Check if this is a group or 1-on-1 conversation
+    const group = await GroupConversationModel.findById(convId).select('members').lean();
+    
+    if (group) {
+      // Group conversation - check membership
+      const isMember = group.members.some(m => m.userId.toString() === requesterId);
+      if (!isMember) throw new UnauthorizedConversationError(requesterId, convId);
+    } else {
+      // 1-on-1 conversation - check participant
+      const conv = await ConversationModel.findById(convId).lean<IConversation>();
+      if (!conv) throw new ConversationNotFoundError(convId);
 
-    const isParticipant = conv.participantIds.some(id => id.toString() === requesterId);
-    if (!isParticipant) throw new UnauthorizedConversationError(requesterId, convId);
+      const isParticipant = conv.participantIds.some(id => id.toString() === requesterId);
+      if (!isParticipant) throw new UnauthorizedConversationError(requesterId, convId);
+    }
 
     try {
       return await this.repo.getMessages(convId, limit, beforeMsgId);

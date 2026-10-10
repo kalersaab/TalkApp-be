@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { LoginDto, GoogleAuthDto, AppleAuthDto, ForgotPasswordDto, ResetPasswordDto } from '@dtos/auth.dto';
+import { LoginDto, GoogleAuthDto, AppleAuthDto, ForgotPasswordDto, ResetPasswordDto, SignInWithEmailDto, VerifyEmailTokenDto } from '@dtos/auth.dto';
 import type { Routes } from '@interfaces/routes.interface';
 import { AuthMiddleware } from '@middlewares/auth.middleware';
 import { loginLimiter, refreshLimiter } from '@middlewares/rateLimiter';
@@ -28,6 +28,12 @@ class AuthRoute implements Routes {
 
     // POST /api/auth/apple
     this.router.post(`${this.path}/apple`, loginLimiter, validationMiddleware(AppleAuthDto, 'body'), this.auth.appleAuth);
+
+    // POST /api/auth/signin-email — Email-only sign-in
+    this.router.post(`${this.path}/signin-email`, loginLimiter, validationMiddleware(SignInWithEmailDto, 'body'), this.auth.signInWithEmail);
+
+    // POST /api/auth/verify-email-token — Verify email token and complete profile
+    this.router.post(`${this.path}/verify-email-token`, validationMiddleware(VerifyEmailTokenDto, 'body'), this.auth.verifyEmailToken);
 
     // POST /api/auth/refresh  — no AuthMiddleware, token is in cookie/body
     this.router.post(`${this.path}/refresh`, refreshLimiter, this.auth.refresh);

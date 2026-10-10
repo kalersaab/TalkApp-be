@@ -62,3 +62,14 @@ export class ResetPasswordDto {
   @Matches(/[0-9]/, { message: 'Password must contain at least one number' })
   public newPassword: string;
 }
+
+export class SignInWithEmailDto {
+  @IsEmail({}, { message: 'Invalid email address' })
+  public email: string;
+}
+
+export class VerifyEmailTokenDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Token is required' })
+  public token: string;
+}

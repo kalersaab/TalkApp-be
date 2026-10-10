@@ -1,17 +1,4 @@
-import { Transform } from 'class-transformer';
-import {
-  IsBoolean,
-  IsEmail,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsArray,
-  Matches,
-  MaxLength,
-  MinLength,
-  IsDateString,
-  IsObject,
-} from 'class-validator';
+import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, IsArray, IsEnum, Matches, MaxLength, MinLength } from 'class-validator';
 
 export enum ProficiencyLevel {
   BEGINNER = 'beginner',
@@ -24,10 +11,8 @@ export class CreateUserDto {
   public email: string;
 
   @IsString()
-  @MinLength(6, { message: 'Password must be at least 8 characters' })
-  @MaxLength(72, { message: 'Password too long' })
-  @Matches(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
-  @Matches(/[0-9]/, { message: 'Password must contain at least one number' })
+  @MinLength(6, { message: 'Password must be at least 6 characters' })
+  @MaxLength(32, { message: 'Password too long' })
   public passwordHash: string;
 
   @IsString()
@@ -67,39 +52,27 @@ export class LoginUserDto {
   public password: string;
 }
 
-export class UpdateUserIdDto {
+export class UpdateUserDto {
   @IsString()
   public id?: string;
 }
 
-export class UpdateUserDto {
-  @IsOptional()
+export class UpdateUserWithPasswordDto {
   @IsString()
-  bio?: string;
-
   @IsOptional()
-  @IsDateString()
-  dateOfBirth?: string;
+  @MinLength(2)
+  @MaxLength(32)
+  public name?: string;
 
+  @IsEmail()
   @IsOptional()
+  public email?: string;
+
   @IsString()
-  nativeLang?: string;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  learningLangs?: string[];
-
-  @IsOptional()
-  @IsObject()
-  proficiencyLevels?: Record<string, string>; // e.g., { "es": "B2", "fr": "A1" }
-
-  @IsOptional()
-  @IsObject()
-  location?: {
-    type: 'Point';
-    coordinates: [number, number];
-  };
+  @IsNotEmpty()
+  @MinLength(6)
+  @MaxLength(32)
+  public password?: string;
 }
 export class GetSingleUserParamsDto {
   @IsString()
@@ -119,7 +92,6 @@ export class VerifyUserDto {
 export class GetUserQueryDto {
   @IsBoolean()
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
   public isActive?: boolean;
 
   @IsString()
@@ -128,7 +100,7 @@ export class GetUserQueryDto {
 
   @IsString()
   @IsOptional()
-  public username?: string;
+  public name?: string;
 
   @IsString()
   @IsOptional()

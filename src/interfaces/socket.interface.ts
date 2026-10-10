@@ -15,6 +15,8 @@ export interface ClientToServerEvents {
   typing_stop: (payload: TypingPayload) => void;
   message_read: (payload: MessageReadPayload) => void;
   heartbeat: () => void;
+  join_group: (payload: JoinGroupPayload) => void;
+  leave_group: (payload: LeaveGroupPayload) => void;
 }
 
 // ─── Server → Client events ───────────────────────────────────────────────────
@@ -31,6 +33,9 @@ export interface ServerToClientEvents {
   error: (payload: ErrorPayload) => void;
   achievement_unlocked: (payload: AchievementUnlockedPayload) => void;
   rank_changed: (payload: RankChangedPayload) => void;
+  group_member_joined: (payload: GroupMemberEventPayload) => void;
+  group_member_left: (payload: GroupMemberEventPayload) => void;
+  group_updated: (payload: GroupUpdatedPayload) => void;
 }
 
 // ─── Inter-server events (Redis adapter) ─────────────────────────────────────
@@ -117,4 +122,36 @@ export interface AchievementUnlockedPayload {
 export interface RankChangedPayload {
   oldRank: string;
   newRank: string;
+}
+
+// ─── Group Chat Payloads ──────────────────────────────────────────────────────
+
+export interface JoinGroupPayload {
+  groupId: string;
+}
+
+export interface LeaveGroupPayload {
+  groupId: string;
+}
+
+export interface GroupMemberEventPayload {
+  groupId: string;
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  timestamp: string;
+}
+
+export interface GroupUpdatedPayload {
+  groupId: string;
+  name?: string;
+  description?: string;
+  avatarUrl?: string;
+  settings?: {
+    onlyAdminsCanPost?: boolean;
+    approvalRequired?: boolean;
+    isPrivate?: boolean;
+  };
+  updatedBy: string;
+  timestamp: string;
 }
