@@ -9,6 +9,7 @@ import { getUserVector, isQdrantAvailable } from '@databases/qdrant';
 import type { MatchFilters, ScoredCandidate, PartnerProfile, CachedMatchResult } from '@interfaces/matching.interface';
 import type { IUser } from '@interfaces/users.interface';
 import { logger } from '@utils/logger';
+import { mapToRecord } from '@utils/util';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ function toPartnerProfile(sc: ScoredCandidate): PartnerProfile {
     avatarUrl: u.avatarUrl,
     nativeLang: u.nativeLang,
     learningLangs: u.learningLangs,
-    proficiencyLevels: u.proficiencyLevels ? Object.fromEntries(u.proficiencyLevels.entries()) : {},
+    proficiencyLevels: mapToRecord(u.proficiencyLevels),
     bio: u.bio,
     isOnline: u.isOnline,
     lastSeen: u.lastSeen,

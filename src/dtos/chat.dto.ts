@@ -34,6 +34,13 @@ export class GetMessagesQueryDto {
   public limit?: string;
 }
 
+export class MarkConversationReadDto {
+  /** Message to mark read up to (inclusive). Omit to only clear the unread counter. */
+  @IsOptional()
+  @IsString()
+  public msgId?: string;
+}
+
 export class GetConversationsQueryDto {
   @IsOptional()
   @IsMongoId({ message: 'lastConvId must be a valid conversation ID' })

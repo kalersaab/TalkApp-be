@@ -15,25 +15,28 @@ export enum Gender {
 /**
  * Complete profile for new Google Sign-In users
  * This is called after initial Google auth when isNewUser=true
+ * Supports multipart/form-data for avatar file upload
  */
 export class CompleteProfileDto {
   @IsString()
-  @IsNotEmpty({ message: 'Username is required' })
-  @MinLength(3, { message: 'Username must be at least 3 characters' })
-  @MaxLength(20, { message: 'Username must be at most 20 characters' })
-  @Matches(/^[a-z0-9_]+$/, { message: 'Username can only contain lowercase letters, numbers, and underscores' })
-  public username: string;
+  @IsNotEmpty({ message: 'displayName is required' })
+  @MinLength(3, { message: 'displayName must be at least 3 characters' })
+  @MaxLength(20, { message: 'displayName must be at most 20 characters' })
+  @Matches(/^[\p{L}\p{M}]+(?:[ .''-][\p{L}\p{M}]+)*\.?$/u, {
+    message: "displayName can only contain letters, spaces, and . ' -",
+  })
+  public displayName: string;
 
-  @IsOptional()
   @IsEnum(Gender, { message: 'Gender must be male, female, or other' })
-  public gender?: Gender;
+  @IsNotEmpty({ message: 'gender is required' })
+  public gender: Gender;
 
   @IsOptional()
   @IsDateString({}, { message: 'Invalid date format' })
   public dateOfBirth?: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Native language is required' })
+  @IsNotEmpty({ message: 'nativeLang is required' })
   public nativeLang: string;
 
   @IsArray()
@@ -47,12 +50,15 @@ export class CompleteProfileDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(300, { message: 'Bio must be at most 300 characters' })
+  @MaxLength(300, { message: 'bio must be at most 300 characters' })
   public bio?: string;
 
   @IsOptional()
   @IsArray()
   public location?: [number, number]; // [longitude, latitude]
+
+  // Note: avatarUrl is set from file upload in multipart/form-data
+  // File is provided via 'avatar' field in form data
 }
 
 /**

@@ -1,10 +1,10 @@
 import { Router } from 'express';
 
-import { CreateConversationDto, GetConversationsQueryDto, GetMessagesQueryDto } from '@dtos/chat.dto';
+import { CreateConversationDto, GetConversationsQueryDto, GetMessagesQueryDto, MarkConversationReadDto } from '@dtos/chat.dto';
 import type { Routes } from '@interfaces/routes.interface';
 import { AuthMiddleware } from '@middlewares/auth.middleware';
 import validationMiddleware from '@middlewares/validation.middleware';
-import { getConversations, createConversation, getMessages, deleteConversation } from '@controllers/chat.controller';
+import { getConversations, createConversation, getMessages, deleteConversation, markConversationRead } from '@controllers/chat.controller';
 
 export class ChatRoute implements Routes {
   public path = '/chat';
@@ -26,6 +26,13 @@ export class ChatRoute implements Routes {
 
     // GET /api/chat/conversations/:convId/messages
     this.router.get(`${this.path}/conversations/:convId/messages`, validationMiddleware(GetMessagesQueryDto, 'query', true), getMessages);
+
+    // POST /api/chat/conversations/:convId/read
+    this.router.post(
+      `${this.path}/conversations/:convId/read`,
+      validationMiddleware(MarkConversationReadDto, 'body', true),
+      markConversationRead,
+    );
 
     // DELETE /api/chat/conversations/:convId
     this.router.delete(`${this.path}/conversations/:convId`, deleteConversation);

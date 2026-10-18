@@ -38,7 +38,7 @@ function toParticipantProfile(user: IUser): ParticipantProfile {
   };
 }
 
-function toConversationDto(conv: IConversation, otherUser: IUser): ConversationDto {
+function toConversationDto(conv: IConversation, otherUser: IUser, requesterId: string): ConversationDto {
   return {
     _id: conv._id.toString(),
     otherParticipant: toParticipantProfile(otherUser),
@@ -50,6 +50,7 @@ function toConversationDto(conv: IConversation, otherUser: IUser): ConversationD
         }
       : null,
     isMutualFriends: conv.isMutualFriends,
+    unreadCount: conv.unreadCounts?.[requesterId] ?? 0,
     updatedAt: conv.updatedAt,
   };
 }
@@ -106,7 +107,7 @@ export class ChatService {
         const otherId = conv.participantIds.map(id => id.toString()).find(id => id !== userId);
         const otherUser = otherId ? userMap.get(otherId) : undefined;
         if (!otherUser) return null;
-        return toConversationDto(conv, otherUser);
+        return toConversationDto(conv, otherUser, userId);
       })
       .filter((c): c is ConversationDto => c !== null);
 
@@ -150,7 +151,7 @@ export class ChatService {
       redis.invalidateProfile(convListKey(targetUserId)).catch(() => null),
     ]);
 
-    return toConversationDto(conv, targetUser);
+    return toConversationDto(conv, targetUser, requesterId);
   }
 
   // ── softDeleteConversation ───────────────────────────────────────────────────
@@ -256,6 +257,72 @@ export class ChatService {
       if (err instanceof CassandraError) throw new CassandraWriteError('updateMessageStatus', err);
       throw err;
     }
+  }
+
+  // ── unread counters + read receipts ──────────────────────────────────────────
+
+  /**
+   * Bump the unread counter for every recipient of a new message and bust their
+   * cached conversation list. The sender never gets a counter.
+   */
+  async incrementUnreadCounts(convId: string, recipientIds: string[], senderId: string): Promise<void> {
+    const recipients = recipientIds.filter(id => id !== senderId);
+    if (!recipients.length) return;
+
+    const inc: Record<string, number> = {};
+    recipients.forEach(id => {
+      inc[`unreadCounts.${id}`] = 1;
+    });
+
+    try {
+      await ConversationModel.updateOne({ _id: new Types.ObjectId(convId) }, { $inc: inc });
+    } catch (err) {
+      logger.warn(`[ChatService] incrementUnreadCounts failed: ${(err as Error).message}`);
+      return;
+    }
+
+    await this.invalidateConversationList(recipients);
+  }
+
+  /** Reset one participant's unread counter to zero. */
+  async clearUnreadCount(convId: string, userId: string): Promise<void> {
+    try {
+      await ConversationModel.updateOne({ _id: new Types.ObjectId(convId) }, { $set: { [`unreadCounts.${userId}`]: 0 } });
+    } catch (err) {
+      logger.warn(`[ChatService] clearUnreadCount failed: ${(err as Error).message}`);
+    }
+
+    await this.invalidateConversationList([userId]);
+  }
+
+  /**
+   * Authorise the reader, mark `msgId` read in Cassandra, then clear their
+   * unread counter. Shared by the socket read receipt and the REST endpoint.
+   */
+  async markConversationRead(input: { convId: string; userId: string; msgId?: string }): Promise<void> {
+    const { convId, userId, msgId } = input;
+    await this.assertParticipant(convId, userId);
+
+    if (msgId) await this.updateMessageStatus(convId, msgId, 'read');
+    await this.clearUnreadCount(convId, userId);
+  }
+
+  /** Throws unless `userId` belongs to the DM or group conversation. */
+  private async assertParticipant(convId: string, userId: string): Promise<void> {
+    const group = await GroupConversationModel.findById(convId).select('members').lean();
+    if (group) {
+      if (!group.members.some(m => m.userId.toString() === userId)) throw new UnauthorizedConversationError(userId, convId);
+      return;
+    }
+
+    const conv = await ConversationModel.findById(convId).lean<IConversation>();
+    if (!conv) throw new ConversationNotFoundError(convId);
+    if (!conv.participantIds.some(id => id.toString() === userId)) throw new UnauthorizedConversationError(userId, convId);
+  }
+
+  private async invalidateConversationList(userIds: string[]): Promise<void> {
+    const redis = getRedisService();
+    await Promise.all(userIds.map(id => redis.invalidateProfile(convListKey(id)).catch(() => null)));
   }
 
   // ── saveToOfflineQueue ───────────────────────────────────────────────────────

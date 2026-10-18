@@ -2,7 +2,7 @@ import type { Response, NextFunction } from 'express';
 
 import type { RequestWithUser } from '@interfaces/auth.interface';
 import { ChatService } from '@services/chat.service';
-import type { CreateConversationDto, GetMessagesQueryDto, GetConversationsQueryDto } from '@dtos/chat.dto';
+import type { CreateConversationDto, GetMessagesQueryDto, GetConversationsQueryDto, MarkConversationReadDto } from '@dtos/chat.dto';
 
 const svc = new ChatService();
 
@@ -63,6 +63,20 @@ export const deleteConversation = async (req: RequestWithUser, res: Response, ne
   try {
     const { convId } = req.params as { convId: string };
     await svc.softDeleteConversation(convId, req.user._id.toString());
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── POST /api/chat/conversations/:convId/read ────────────────────────────────
+
+export const markConversationRead = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { convId } = req.params as { convId: string };
+    const { msgId } = req.body as MarkConversationReadDto;
+
+    await svc.markConversationRead({ convId, userId: req.user._id.toString(), msgId });
     res.json({ success: true });
   } catch (err) {
     next(err);

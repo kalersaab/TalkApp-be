@@ -1,5 +1,5 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, AWS_S3_CDN_URL } from '@config';
+import { AWS_REGION, AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, AWS_S3_BUCKET, AWS_S3_CDN_URL } from '@config';
 import { logger } from '@utils/logger';
 
 let s3: S3Client | null = null;
@@ -9,7 +9,7 @@ function getS3Client(): S3Client {
     s3 = new S3Client({
       region: AWS_REGION ?? 'us-east-1',
       credentials:
-        AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY ? { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY } : undefined, // falls back to IAM role in production
+        AWS_SES_ACCESS_KEY_ID && AWS_SES_SECRET_ACCESS_KEY ? { accessKeyId: AWS_SES_ACCESS_KEY_ID, secretAccessKey: AWS_SES_SECRET_ACCESS_KEY } : undefined, // falls back to IAM role in production
     });
   }
   return s3;
