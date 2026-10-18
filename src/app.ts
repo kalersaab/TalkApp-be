@@ -97,7 +97,12 @@ class App {
   }
 
   private initializeMiddlewares(): void {
-    this.app.use(morgan(LOG_FORMAT ?? 'dev', { stream }));
+    this.app.use(
+      morgan(LOG_FORMAT ?? 'dev', {
+        stream,
+        skip: req => req.path === '/v1/models',
+      }),
+    );
     this.app.use(cors({ origin: ORIGIN, credentials: CREDENTIALS }));
     this.app.use(hpp());
     this.app.use(helmet());
@@ -112,9 +117,15 @@ class App {
       this.app.use('/api/', route.router);
     });
 
-    // Health endpoint
-    this.app.get('/api/health', (_req, res) => {
+    const healthHandler = (_req: express.Request, res: express.Response) => {
       res.json({ status: 'ok', uptime: process.uptime() });
+    };
+    this.app.get('/health', healthHandler);
+    this.app.get('/api/health', healthHandler);
+
+    // OpenAI-compatible probe used by local LLM clients (Cursor, LM Studio, etc.)
+    this.app.get('/v1/models', (_req, res) => {
+      res.json({ object: 'list', data: [] });
     });
   }
 

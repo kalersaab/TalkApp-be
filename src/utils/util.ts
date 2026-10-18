@@ -4,6 +4,25 @@
  * @returns {Boolean} true & false
  * @description this value is Empty Check
  */
+/** Convert a Mongoose Map, lean object, or JSON string into a Record. */
+export function mapToRecord(value: unknown): Record<string, string> {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      return mapToRecord(JSON.parse(value));
+    } catch {
+      return {};
+    }
+  }
+  if (value instanceof Map) {
+    return Object.fromEntries(value) as Record<string, string>;
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return { ...(value as Record<string, string>) };
+  }
+  return {};
+}
+
 export const isEmpty = (value: string | number | object): boolean => {
   if (value === null) {
     return true;

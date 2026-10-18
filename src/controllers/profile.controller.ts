@@ -1,22 +1,21 @@
 import type { Response, NextFunction } from 'express';
-import type { File as MulterFile } from 'multer';
 
 import type { RequestWithUser } from '@interfaces/auth.interface';
 import { ProfileService } from '@services/profile.service';
 import { CompleteProfileDto } from '@dtos/profile.dto';
 
 // Multer adds `file` to the request — extend locally
-type RequestWithFile = RequestWithUser & { file?: MulterFile };
+type RequestWithFile = RequestWithUser & { file?: Express.Multer.File };
 
 const svc = new ProfileService();
 
 // ─── POST /api/profile/complete ───────────────────────────────────────────────
 
-export const completeProfile = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
+export const completeProfile = async (req: RequestWithFile, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user._id.toString();
     const profileData: CompleteProfileDto = req.body;
-    const profile = await svc.completeProfile(userId, profileData);
+    const profile = await svc.completeProfile(userId, profileData, req.file);
     res.json({ success: true, data: profile, message: 'Profile completed successfully' });
   } catch (err) {
     next(err);

@@ -33,7 +33,12 @@ export class ProfileRoute implements Routes {
     this.router.use(AuthMiddleware);
 
     // ── Profile onboarding (for new Google Sign-In users) ───────────────────
-    this.router.post(`${this.path}/complete`, validationMiddleware(CompleteProfileDto, 'body'), completeProfile);
+    this.router.post(
+      `${this.path}/complete`,
+      avatarUpload,
+      validationMiddleware(CompleteProfileDto, 'body'),
+      completeProfile
+    );
 
     // ── Own profile ──────────────────────────────────────────────────────────
     this.router.get(`${this.path}/me`, getMyProfile);

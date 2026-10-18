@@ -14,7 +14,11 @@ export interface ClientToServerEvents {
   typing_start: (payload: TypingPayload) => void;
   typing_stop: (payload: TypingPayload) => void;
   message_read: (payload: MessageReadPayload) => void;
+  /** Recipient confirms delivery of a message it received. */
+  message_delivered: (payload: MessageDeliveredAckPayload) => void;
   heartbeat: () => void;
+  join_conversation: (payload: ConversationRoomPayload) => void;
+  leave_conversation: (payload: ConversationRoomPayload) => void;
   join_group: (payload: JoinGroupPayload) => void;
   leave_group: (payload: LeaveGroupPayload) => void;
 }
@@ -63,6 +67,15 @@ export interface MessageReadPayload {
   msgId: string;
 }
 
+export interface MessageDeliveredAckPayload {
+  convId: string;
+  msgId: string;
+}
+
+export interface ConversationRoomPayload {
+  convId: string;
+}
+
 export interface ConnectedPayload {
   serverTime: string;
   userId: string;
@@ -76,7 +89,9 @@ export interface MessageAckPayload {
 
 export interface MessageDeliveredPayload {
   msgId: string;
+  convId: string;
   status: MessageStatus;
+  deliveredAt: string;
 }
 
 export interface NewMessagePayload {
@@ -103,6 +118,7 @@ export interface TypingEventPayload {
 
 export interface ReadReceiptPayload {
   msgId: string;
+  convId: string;
   readAt: string;
 }
 

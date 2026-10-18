@@ -20,6 +20,7 @@ import type {
 } from '@interfaces/profile.interface';
 import type { IUser, IAchievement, IInventory, IPost, IFollow } from '@interfaces/users.interface';
 import { logger } from '@utils/logger';
+import { mapToRecord } from '@utils/util';
 
 // ─── Cache TTL ────────────────────────────────────────────────────────────────
 
@@ -82,15 +83,10 @@ export class ProfileService {
   /**
    * Complete profile for new Google Sign-In users
    * Updates the minimally-created user with full profile information
+   * Optionally handles avatar file upload to S3
    */
-  async completeProfile(userId: string, profileData: import('@dtos/profile.dto').CompleteProfileDto): Promise<ProfileDTO> {
-    const { username, gender, dateOfBirth, nativeLang, learningLangs, proficiencyLevels, bio, location } = profileData;
-
-    // Check if username is already taken
-    const existingUser = await UserModel.findOne({ username: username.toLowerCase() }).lean();
-    if (existingUser && existingUser._id.toString() !== userId) {
-      throw new HttpException(409, 'Username already taken');
-    }
+  async completeProfile(userId: string, profileData: import('@dtos/profile.dto').CompleteProfileDto, avatarFile?: Express.Multer.File): Promise<ProfileDTO> {
+    const { displayName, gender, dateOfBirth, nativeLang, learningLangs, proficiencyLevels, bio, location } = profileData;
 
     // Validate learning languages
     if (learningLangs.length === 0) {
@@ -101,17 +97,27 @@ export class ProfileService {
       throw new HttpException(400, 'Maximum 5 learning languages allowed');
     }
 
+    // Handle avatar upload if provided
+    let avatarUrl: string | undefined;
+    if (avatarFile) {
+      const ext = avatarFile.mimetype.split('/')[1] ?? 'jpg';
+      const key = `avatars/${userId}/${Date.now()}.${ext}`;
+      avatarUrl = await uploadToS3(key, avatarFile.buffer, avatarFile.mimetype);
+      logger.info(`[Profile] Avatar uploaded for user ${userId}: ${key}`);
+    }
+
     // Update user with profile data
     const updateData: Partial<IUser> = {
-      username: username.toLowerCase(),
+      displayName: displayName,
+      gender: gender as any,
       nativeLang,
       learningLangs,
-      proficiencyLevels: proficiencyLevels || {},
+      proficiencyLevels: mapToRecord(proficiencyLevels) as IUser['proficiencyLevels'],
     };
 
-    if (gender) updateData.gender = gender as any;
     if (dateOfBirth) updateData.dateOfBirth = new Date(dateOfBirth);
     if (bio) updateData.bio = bio;
+    if (avatarUrl) updateData.avatarUrl = avatarUrl;
     if (location && location.length === 2) {
       updateData.location = {
         type: 'Point',
@@ -178,7 +184,7 @@ export class ProfileService {
       bio: user.bio,
       nativeLang: user.nativeLang,
       learningLangs: user.learningLangs,
-      proficiencyLevels: user.proficiencyLevels ? Object.fromEntries(user.proficiencyLevels.entries()) : {},
+      proficiencyLevels: mapToRecord(user.proficiencyLevels),
       gender: user.gender,
       joinedAt: user.joinedAt,
       daysJoined: user.daysJoined,
@@ -239,7 +245,7 @@ export class ProfileService {
     }
 
     if (updates.proficiencyLevels !== undefined) {
-      allowedFields['proficiencyLevels'] = new Map(Object.entries(updates.proficiencyLevels));
+      allowedFields['proficiencyLevels'] = mapToRecord(updates.proficiencyLevels);
     }
 
     await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: allowedFields });

@@ -21,6 +21,8 @@ export interface ConversationDto {
     timestamp: Date;
   } | null;
   isMutualFriends: boolean;
+  /** Unread messages for the requesting user in this conversation. */
+  unreadCount: number;
   updatedAt: Date;
 }
 

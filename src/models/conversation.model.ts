@@ -18,6 +18,9 @@ const conversationSchema = new Schema<IConversation>(
       timestamp: { type: Date, default: Date.now },
     },
     isMutualFriends: { type: Boolean, default: false },
+    // Per-participant unread counter keyed by user id. `Mixed` (not Map) so
+    // `$inc` can target dynamic `unreadCounts.<userId>` paths.
+    unreadCounts: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },
 );

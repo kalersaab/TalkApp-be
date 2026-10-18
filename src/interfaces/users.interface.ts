@@ -101,6 +101,8 @@ export interface IConversation extends Document {
   participantIds: Types.ObjectId[];
   lastMessage: LastMessage | null;
   isMutualFriends: boolean;
+  /** Per-participant unread counter, keyed by user id. Reset when that user reads the conversation. */
+  unreadCounts?: Record<string, number>;
   createdAt: Date;
   updatedAt: Date;
 }
