@@ -12,10 +12,6 @@ export enum Gender {
   OTHER = 'other',
 }
 
-/**
- * Complete profile for new Google Sign-In users
- * This is called after initial Google auth when isNewUser=true
- */
 export class CompleteProfileDto {
   @IsString()
   @IsNotEmpty({ message: 'Username is required' })
@@ -52,12 +48,9 @@ export class CompleteProfileDto {
 
   @IsOptional()
   @IsArray()
-  public location?: [number, number]; // [longitude, latitude]
+  public location?: [number, number];
 }
 
-/**
- * Update existing user profile
- */
 export class UpdateProfileDto {
   @IsOptional()
   @IsString()

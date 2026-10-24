@@ -25,14 +25,10 @@ import type {
 import type { NotificationType } from '@models/notificationLog.model';
 import { logger } from '@utils/logger';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const FCM_BATCH_SIZE = 500;
 const MAX_RETRIES = 3;
 const BASE_RETRY_MS = 500;
 const LIKE_MILESTONES = new Set([10, 50, 100, 500]);
-
-// ─── FCM singleton ────────────────────────────────────────────────────────────
 
 let _fcmApp: admin.app.App | null = null;
 
@@ -55,8 +51,6 @@ function getFCMApp(): admin.app.App {
   return _fcmApp;
 }
 
-// ─── APNs singleton ───────────────────────────────────────────────────────────
-
 let _apnProvider: apn.Provider | null = null;
 
 function getAPNsProvider(): apn.Provider {
@@ -76,8 +70,6 @@ function getAPNsProvider(): apn.Provider {
   return _apnProvider;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
@@ -86,11 +78,7 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ─── NotificationService ──────────────────────────────────────────────────────
-
 export class NotificationService {
-  // ── Token management ─────────────────────────────────────────────────────────
-
   async saveDeviceToken(userId: string, platform: 'android' | 'ios', token: string): Promise<void> {
     await DeviceTokenModel.findOneAndUpdate({ userId, platform }, { $set: { token, updatedAt: new Date() } }, { upsert: true });
   }
@@ -104,8 +92,6 @@ export class NotificationService {
       await UserModel.updateOne({ _id: userId }, { $set: update });
     }
   }
-
-  // ── Public send methods ───────────────────────────────────────────────────────
 
   async sendMessageNotification(
     recipientId: string,
@@ -161,8 +147,6 @@ export class NotificationService {
     });
   }
 
-  // ── Core delivery pipeline ────────────────────────────────────────────────────
-
   private async deliver(userId: string, type: NotificationType, payload: NotificationPayload): Promise<void> {
     const tokens = await DeviceTokenModel.find({ userId }).lean();
     if (!tokens.length) return;
@@ -173,12 +157,10 @@ export class NotificationService {
       token: t.token,
     }));
 
-    // Split into FCM_BATCH_SIZE chunks
     for (let i = 0; i < targets.length; i += FCM_BATCH_SIZE) {
       const batch = targets.slice(i, i + FCM_BATCH_SIZE);
       const results = await Promise.allSettled(batch.map(t => this.sendWithRetry(t, payload, type)));
 
-      // Handle invalid tokens
       const invalids = results
         .map((r, idx) => ({ r, target: batch[idx]! }))
         .filter(({ r }) => r.status === 'fulfilled' && (r.value as DeliveryResult).invalidToken);
@@ -191,8 +173,6 @@ export class NotificationService {
       }
     }
   }
-
-  // ── Retry wrapper ─────────────────────────────────────────────────────────────
 
   private async sendWithRetry(target: DeliveryTarget, payload: NotificationPayload, type: NotificationType, attempt = 1): Promise<DeliveryResult> {
     try {
@@ -212,8 +192,6 @@ export class NotificationService {
     }
   }
 
-  // ── FCM (Android) ─────────────────────────────────────────────────────────────
-
   private async sendFCM(target: DeliveryTarget, payload: NotificationPayload): Promise<DeliveryResult> {
     const base: DeliveryResult = { userId: target.userId, platform: 'android', success: false, invalidToken: false };
 
@@ -226,7 +204,7 @@ export class NotificationService {
           data: payload.data,
           android: {
             priority: 'high',
-            ttl: 86400 * 1000, // 24h in ms
+            ttl: 86400 * 1000,
             notification: { sound: payload.sound ?? 'default' },
           },
         });
@@ -241,8 +219,6 @@ export class NotificationService {
       throw err;
     }
   }
-
-  // ── APNs (iOS) ────────────────────────────────────────────────────────────────
 
   private async sendAPNs(target: DeliveryTarget, payload: NotificationPayload): Promise<DeliveryResult> {
     const base: DeliveryResult = { userId: target.userId, platform: 'ios', success: false, invalidToken: false };
@@ -266,16 +242,11 @@ export class NotificationService {
     return { ...base, success: true };
   }
 
-  // ── Preference check ──────────────────────────────────────────────────────────
-
   private async prefEnabled(userId: string, key: keyof NotificationPreferences): Promise<boolean> {
     const user = (await UserModel.findById(userId).select('notificationPrefs').lean()) as { notificationPrefs?: Record<string, boolean> } | null;
 
-    // Default to enabled if prefs not set
     return user?.notificationPrefs?.[key] !== false;
   }
-
-  // ── Logging ───────────────────────────────────────────────────────────────────
 
   private async log(
     target: DeliveryTarget,

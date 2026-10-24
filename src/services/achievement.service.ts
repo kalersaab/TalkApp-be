@@ -11,8 +11,6 @@ import { getIO } from '@sockets/gateway.registry';
 import type { IAchievement, IInventory, CollectorRank, MedalTier, ItemType } from '@interfaces/users.interface';
 import { logger } from '@utils/logger';
 
-// ─── Achievement → unlockable item mapping ────────────────────────────────────
-
 interface UnlockableItem {
   itemId: string;
   itemType: ItemType;
@@ -27,8 +25,6 @@ const ACHIEVEMENT_ITEM_MAP: Record<string, UnlockableItem> = {
   partners_10: { itemId: 'chat_background_world', itemType: 'chatBackground' },
 } as const;
 
-// ─── Collector rank thresholds ────────────────────────────────────────────────
-
 const RANK_THRESHOLDS: Array<{ min: number; rank: CollectorRank }> = [
   { min: 51, rank: 'legendary' },
   { min: 31, rank: 'elite' },
@@ -41,28 +37,20 @@ function itemCountToRank(count: number): CollectorRank {
   return RANK_THRESHOLDS.find(t => count >= t.min)?.rank ?? 'junior';
 }
 
-// ─── Return type ──────────────────────────────────────────────────────────────
-
 export interface AwardResult {
   achievement: IAchievement;
   unlockedItem: UnlockableItem | null;
   newRank: CollectorRank | null;
 }
 
-// ─── AchievementService ───────────────────────────────────────────────────────
-
 export class AchievementService {
-  // ── awardAchievement ─────────────────────────────────────────────────────────
-
   async awardAchievement(userId: string, achievementType: string, medalTier: MedalTier): Promise<AwardResult | null> {
-    // 1. Idempotency check — skip if already earned
     const existing = await AchievementModel.findOne({
       userId: new Types.ObjectId(userId),
       achievementType,
     });
     if (existing) return null;
 
-    // 2. Create achievement document
     const achievement = await AchievementModel.create({
       userId: new Types.ObjectId(userId),
       achievementType,
@@ -70,10 +58,8 @@ export class AchievementService {
       earnedAt: new Date(),
     });
 
-    // 3. Update denormalised medal count on User
     await this.updateMedalCount(userId);
 
-    // 4. Unlock item if this achievement has one
     const itemDef = ACHIEVEMENT_ITEM_MAP[achievementType] ?? null;
     let unlockedItem: UnlockableItem | null = null;
     if (itemDef) {
@@ -81,10 +67,8 @@ export class AchievementService {
       unlockedItem = itemDef;
     }
 
-    // 5. Recalculate collector rank
     const newRank = await this.recalculateCollectorRank(userId);
 
-    // 6. Emit WebSocket event to user's personal room
     this.emitAchievementUnlocked(userId, achievement, unlockedItem, newRank);
 
     logger.info(`[AchievementService] awarded ${achievementType} (${medalTier}) to user ${userId}`);
@@ -92,16 +76,12 @@ export class AchievementService {
     return { achievement, unlockedItem, newRank };
   }
 
-  // ── updateMedalCount ─────────────────────────────────────────────────────────
-
   async updateMedalCount(userId: string): Promise<void> {
     const count = await AchievementModel.countDocuments({
       userId: new Types.ObjectId(userId),
     });
     await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { totalMedalCount: count } });
   }
-
-  // ── recalculateCollectorRank ──────────────────────────────────────────────────
 
   async recalculateCollectorRank(userId: string): Promise<CollectorRank | null> {
     const inventory = await InventoryModel.findOne({
@@ -115,26 +95,21 @@ export class AchievementService {
     if (!user) return null;
 
     const oldRank = user.collectorRank as CollectorRank;
-    if (oldRank === newRank) return null; // no change
+    if (oldRank === newRank) return null;
 
     await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { collectorRank: newRank } });
 
-    // Sync rank on inventory document too
     await InventoryModel.updateOne({ userId: new Types.ObjectId(userId) }, { $set: { collectorRank: newRank } });
 
-    // Bust profile cache
     await getRedisService()
       .invalidateProfile(`profile:full:${userId}`)
       .catch(() => null);
 
-    // Emit rank change via WebSocket
     this.emitRankChanged(userId, oldRank, newRank);
 
     logger.info(`[AchievementService] rank ${oldRank} → ${newRank} for user ${userId}`);
     return newRank;
   }
-
-  // ── addToInventory ────────────────────────────────────────────────────────────
 
   async addToInventory(userId: string, itemId: string, itemType: ItemType): Promise<IInventory | null> {
     const updated = await InventoryModel.findOneAndUpdate(
@@ -149,18 +124,14 @@ export class AchievementService {
 
     if (!updated) return null;
 
-    // Keep itemCount in sync
     await InventoryModel.updateOne({ userId: new Types.ObjectId(userId) }, { $set: { itemCount: updated.items.length } });
 
-    // Bust inventory cache
     await getRedisService()
       .invalidateInventory(userId)
       .catch(() => null);
 
     return updated;
   }
-
-  // ── checkStreakAchievements ───────────────────────────────────────────────────
 
   async checkStreakAchievements(userId: string, currentStreak: number): Promise<void> {
     const checks: Array<{ type: string; threshold: number; tier: MedalTier }> = [
@@ -177,14 +148,11 @@ export class AchievementService {
     }
   }
 
-  // ── checkFollowAchievements ───────────────────────────────────────────────────
-
   async checkFollowAchievements(userId: string): Promise<void> {
     const uid = new Types.ObjectId(userId);
 
-    // How many people this user follows
     const followingCount = await FollowModel.countDocuments({ followerId: uid });
-    // How many followers this user has
+
     const followersCount = await FollowModel.countDocuments({ followingId: uid });
 
     if (followingCount >= 1) {
@@ -201,8 +169,6 @@ export class AchievementService {
     }
   }
 
-  // ── checkPostAchievements ─────────────────────────────────────────────────────
-
   async checkPostAchievements(userId: string, postLikeCount?: number): Promise<void> {
     const uid = new Types.ObjectId(userId);
     const postCount = await PostModel.countDocuments({ userId: uid });
@@ -218,8 +184,6 @@ export class AchievementService {
     }
   }
 
-  // ── checkChatAchievements ─────────────────────────────────────────────────────
-
   async checkChatAchievements(userId: string, totalMessagesSent: number): Promise<void> {
     const uid = new Types.ObjectId(userId);
 
@@ -230,7 +194,6 @@ export class AchievementService {
       await this.awardAchievement(userId, 'messages_100', 'silver');
     }
 
-    // Count distinct conversation partners
     const conversations = await ConversationModel.find({
       participantIds: uid,
     })
@@ -243,8 +206,6 @@ export class AchievementService {
       await this.awardAchievement(userId, 'partners_10', 'gold');
     }
   }
-
-  // ── Private: WebSocket emitters ───────────────────────────────────────────────
 
   private emitAchievementUnlocked(
     userId: string,
@@ -260,16 +221,12 @@ export class AchievementService {
         unlockedItem,
         newRank,
       });
-    } catch {
-      // Gateway may not be initialised in tests — swallow silently
-    }
+    } catch {}
   }
 
   private emitRankChanged(userId: string, oldRank: string, newRank: string): void {
     try {
       getIO()?.to(`user:${userId}`).emit('rank_changed', { oldRank, newRank });
-    } catch {
-      // Swallow — non-critical
-    }
+    } catch {}
   }
 }

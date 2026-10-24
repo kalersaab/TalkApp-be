@@ -1,11 +1,7 @@
 import type { types } from 'cassandra-driver';
 
-// ─── Value types ──────────────────────────────────────────────────────────────
-
 export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
 export type ContentType = 'text' | 'image' | 'audio' | 'video' | 'file' | 'sticker';
-
-// ─── Core message shape (mirrors the Cassandra row exactly) ──────────────────
 
 export interface CassandraMessage {
   conv_id: types.Uuid;
@@ -20,17 +16,13 @@ export interface CassandraMessage {
   created_at: Date;
 }
 
-// ─── Offline queue row ────────────────────────────────────────────────────────
-
 export interface OfflineQueueRow {
   user_id: types.Uuid;
   msg_id: types.TimeUuid;
   conv_id: types.Uuid;
-  payload: string; // JSON-serialised CassandraMessage
+  payload: string;
   created_at: Date;
 }
-
-// ─── Input DTOs (callers use plain strings/dates; client converts to Uuid) ────
 
 export interface SaveMessageInput {
   convId: string;
@@ -43,7 +35,7 @@ export interface SaveMessageInput {
 
 export interface UpdateStatusInput {
   convId: string;
-  msgId: string; // TimeUUID string
+  msgId: string;
   status: MessageStatus;
 }
 
@@ -58,8 +50,6 @@ export interface AddToOfflineQueueInput {
   userId: string;
   message: CassandraMessage;
 }
-
-// ─── Output DTO (what callers receive — plain JS types, no driver types) ──────
 
 export interface MessageDto {
   convId: string;
@@ -82,15 +72,11 @@ export interface OfflineQueueDto {
   createdAt: Date;
 }
 
-// ─── Paginated result ─────────────────────────────────────────────────────────
-
 export interface PagedMessages {
   messages: MessageDto[];
-  /** Pass back to next call to get the next page. Null when no more pages. */
+
   pagingState: string | null;
 }
-
-// ─── Typed error ──────────────────────────────────────────────────────────────
 
 export class CassandraError extends Error {
   constructor(public readonly operation: string, public readonly cause: unknown) {

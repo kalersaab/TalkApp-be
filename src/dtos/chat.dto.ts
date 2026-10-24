@@ -1,7 +1,6 @@
 import { IsIn, IsMongoId, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 
 const VALID_CONTENT_TYPES = ['text', 'image', 'audio', 'video', 'file', 'sticker'] as const;
-// const CDN_REGEX = /^https:\/\//; / // tighten to your CDN domain in production
 
 export class CreateConversationDto {
   @IsMongoId({ message: 'targetUserId must be a valid user ID' })
@@ -17,7 +16,6 @@ export class SendMessageDto {
   @IsIn(VALID_CONTENT_TYPES, { message: `contentType must be one of: ${VALID_CONTENT_TYPES.join(', ')}` })
   public contentType: (typeof VALID_CONTENT_TYPES)[number];
 
-  // mediaUrl is required when contentType is not 'text'
   @ValidateIf(o => (o as SendMessageDto).contentType !== 'text')
   @IsUrl({ protocols: ['https'], require_protocol: true }, { message: 'mediaUrl must be a valid HTTPS CDN URL' })
   @IsNotEmpty({ message: 'mediaUrl is required for non-text messages' })
@@ -43,8 +41,6 @@ export class GetConversationsQueryDto {
   @IsString()
   public limit?: string;
 }
-
-// ─── Group Chat DTOs ──────────────────────────────────────────────────────────
 
 export class CreateGroupDto {
   @IsString()
@@ -116,4 +112,3 @@ export class GetGroupsQueryDto {
   @IsString()
   public limit?: string;
 }
-

@@ -1,7 +1,5 @@
 import type { Document, Types } from 'mongoose';
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
-
 export type Provider = 'local' | 'google' | 'facebook' | 'phone';
 export type Role = 'user' | 'admin';
 export type Gender = 'male' | 'female' | 'other';
@@ -11,11 +9,9 @@ export type MedalTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
 export type PostType = 'text' | 'image' | 'voice';
 export type ItemType = 'avatarEffect' | 'chatBubble' | 'chatBackground';
 
-// ─── Sub-documents ────────────────────────────────────────────────────────────
-
 export interface GeoPoint {
   type: 'Point';
-  coordinates: [number, number]; // [longitude, latitude]
+  coordinates: [number, number];
 }
 
 export interface EquippedItems {
@@ -42,8 +38,6 @@ export interface EquippedInventoryItems {
   chatBackgroundId: string | null;
 }
 
-// ─── Document Interfaces ──────────────────────────────────────────────────────
-
 export interface IUser extends Document {
   displayName: string;
   username: string;
@@ -58,38 +52,31 @@ export interface IUser extends Document {
   isVerified: boolean;
   isActive: boolean;
 
-  // Language learning
   nativeLang: string;
   learningLangs: string[];
   proficiencyLevels: Map<string, ProficiencyLevel>;
 
-  // Profile
   gender: Gender | null;
   dateOfBirth: Date | null;
   location: GeoPoint | null;
   bio: string | null;
 
-  // Activity
   daysJoined: number;
   joinedAt: Date;
   currentStreak: number;
   longestStreak: number;
   lastActiveDate: Date | null;
 
-  // Social
   followingCount: number;
   followersCount: number;
 
-  // Gamification
   totalMedalCount: number;
   collectorRank: CollectorRank;
   equippedItems: EquippedItems;
 
-  // Presence
   isOnline: boolean;
   lastSeen: Date | null;
 
-  // Brute-force protection
   failedLoginAttempts: number;
   lockUntil: Date | null;
 
@@ -146,8 +133,6 @@ export interface IStreak extends Document {
   lastActiveDate: Date;
   updatedAt: Date;
 }
-
-// ─── Legacy compat (used by existing auth service) ────────────────────────────
 
 export interface LoginUser {
   email: string;

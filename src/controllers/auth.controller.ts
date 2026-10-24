@@ -15,8 +15,6 @@ export class AuthController {
     res.cookie(AuthService.cookieName(), refreshToken, AuthService.cookieOptions());
   }
 
-  // ─── POST /api/auth/login ─────────────────────────────────────────────────────
-
   public login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userData: LoginDto = req.body;
@@ -38,8 +36,6 @@ export class AuthController {
     }
   };
 
-  // ─── GET /api/auth/me ─────────────────────────────────────────────────────────
-
   public getMe = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const user = req.user;
@@ -48,7 +44,6 @@ export class AuthController {
         return;
       }
 
-      // const userData = await this.svc.getMe(user);
       res.status(200).json({
         success: true,
         data: user,
@@ -59,14 +54,17 @@ export class AuthController {
     }
   };
 
-  // ─── POST /api/auth/google ────────────────────────────────────────────────────
-
   public googleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      console.log('[AUTH] Google auth request received');
+      console.log('[AUTH] Request body:', { hasIdToken: !!req.body.idToken, idTokenLength: req.body.idToken?.length });
+
       const { idToken }: GoogleAuthDto = req.body;
       const result = await this.svc.googleAuth(idToken);
 
       this.setRefreshCookie(res, result.refreshToken);
+
+      console.log('[AUTH] Google auth successful:', { userId: result.user._id, isNewUser: result.isNewUser });
 
       res.status(200).json({
         success: true,
@@ -77,13 +75,11 @@ export class AuthController {
           isNewUser: result.isNewUser,
         },
       });
-      
     } catch (err) {
+      console.error('[AUTH] Google auth failed:', err);
       next(err);
     }
   };
-
-  // ─── POST /api/auth/apple ─────────────────────────────────────────────────────
 
   public appleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -105,8 +101,6 @@ export class AuthController {
       next(err);
     }
   };
-
-  // ─── POST /api/auth/refresh ───────────────────────────────────────────────────
 
   public refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -131,8 +125,6 @@ export class AuthController {
     }
   };
 
-  // ─── POST /api/auth/logout ────────────────────────────────────────────────────
-
   public logout = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const rawToken: string | undefined =
@@ -146,8 +138,6 @@ export class AuthController {
       next(err);
     }
   };
-
-  // ─── POST /api/auth/forgot-password ───────────────────────────────────────────
 
   public forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -170,8 +160,6 @@ export class AuthController {
     }
   };
 
-  // ─── POST /api/auth/reset-password ────────────────────────────────────────────
-
   public resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { email, otp, newPassword } = req.body as { email?: string; otp?: string; newPassword?: string };
@@ -193,8 +181,6 @@ export class AuthController {
     }
   };
 
-  // ─── POST /api/auth/signin-email ──────────────────────────────────────────────
-
   public signInWithEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { email } = req.body as { email?: string };
@@ -206,7 +192,6 @@ export class AuthController {
 
       const result = await this.svc.signInWithEmail(email);
 
-      // For new users, don't set cookie
       if ('isNewUser' in result && result.isNewUser) {
         res.status(200).json({
           success: true,
@@ -216,7 +201,6 @@ export class AuthController {
         return;
       }
 
-      // For existing users, set refresh token cookie
       if ('refreshToken' in result) {
         this.setRefreshCookie(res, result.refreshToken);
       }
@@ -230,8 +214,6 @@ export class AuthController {
       next(err);
     }
   };
-
-  // ─── POST /api/auth/verify-email-token ────────────────────────────────────────
 
   public verifyEmailToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

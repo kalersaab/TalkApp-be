@@ -1,9 +1,3 @@
-/**
- * Generates an RSA-2048 key pair for JWT RS256 signing.
- * Prints base64-encoded PEM values ready to paste into your .env file.
- *
- * Run once:  npm run gen:keys
- */
 import { generateKeyPairSync } from 'crypto';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {

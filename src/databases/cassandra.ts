@@ -5,8 +5,6 @@ import { CASSANDRA_CONTACT_POINTS, CASSANDRA_LOCAL_DC, CASSANDRA_USER, CASSANDRA
 import { logger } from '@utils/logger';
 import { CassandraError } from '@interfaces/message.interface';
 
-// ─── CQL statements ───────────────────────────────────────────────────────────
-
 export const CQL = {
   CREATE_KEYSPACE: `
     CREATE KEYSPACE IF NOT EXISTS langlearn
@@ -97,8 +95,6 @@ export const CQL = {
   `,
 } as const;
 
-// ─── CassandraClient ──────────────────────────────────────────────────────────
-
 export class CassandraClient {
   private client: Client;
   private isReady = false;
@@ -106,8 +102,6 @@ export class CassandraClient {
   private static readonly MAX_RETRIES = 8;
   private static readonly BASE_DELAY_MS = 500;
 
-  // Default query options — prepare:true tells the driver to cache the
-  // prepared statement internally on first execution (no manual prepare() needed)
   private static readonly DEFAULT_OPTIONS: QueryOptions = {
     consistency: types.consistencies.localOne,
     prepare: true,
@@ -150,8 +144,6 @@ export class CassandraClient {
     });
   }
 
-  // ─── Lifecycle ──────────────────────────────────────────────────────────────
-
   async connect(): Promise<void> {
     await this.connectWithRetry();
     await this.initSchema();
@@ -165,10 +157,7 @@ export class CassandraClient {
     logger.info('[Cassandra] Disconnected');
   }
 
-  // ─── Schema init ────────────────────────────────────────────────────────────
-
   private async initSchema(): Promise<void> {
-    // DDL runs without prepare:true — Cassandra cannot prepare DDL statements
     const ddlOptions: QueryOptions = { prepare: false };
     await this.client.execute(CQL.CREATE_KEYSPACE, [], ddlOptions);
     await this.client.execute(CQL.CREATE_MESSAGES_TABLE, [], ddlOptions);
@@ -176,13 +165,6 @@ export class CassandraClient {
     logger.info('[Cassandra] Schema initialised');
   }
 
-  // ─── Query execution ─────────────────────────────────────────────────────────
-
-  /**
-   * Execute a CQL string with parameters.
-   * The driver automatically prepares and caches the statement on first call
-   * when prepare:true is set (the default). Subsequent calls reuse the cache.
-   */
   async execute(cql: string, params: unknown[] = [], options: QueryOptions = {}): Promise<types.ResultSet> {
     return this.client.execute(cql, params, {
       ...CassandraClient.DEFAULT_OPTIONS,
@@ -190,12 +172,7 @@ export class CassandraClient {
     });
   }
 
-  /**
-   * Batch execute — for atomic multi-row writes.
-   * Accepts the exact shape the driver expects.
-   */
   async batch(queries: Array<{ query: string; params: unknown[] }>, options: QueryOptions = {}): Promise<types.ResultSet> {
-    // Cast params to the driver's ArrayOrObject type
     const batchQueries = queries.map(q => ({
       query: q.query,
       params: q.params as unknown[],
@@ -207,14 +184,11 @@ export class CassandraClient {
     });
   }
 
-  // ─── Health check ────────────────────────────────────────────────────────────
-
   async healthCheck(): Promise<{ status: 'ok' | 'error'; latencyMs: number; hosts: string[] }> {
     const start = Date.now();
     try {
       await this.client.execute('SELECT now() FROM system.local', [], { prepare: false });
 
-      // Host is exported from the root cassandra-driver package, not types namespace
       const hosts = this.client.hosts
         .values()
         .filter((h: Host) => h.isUp())
@@ -225,8 +199,6 @@ export class CassandraClient {
       return { status: 'error', latencyMs: Date.now() - start, hosts: [] };
     }
   }
-
-  // ─── Exponential backoff connect ─────────────────────────────────────────────
 
   private async connectWithRetry(attempt = 1): Promise<void> {
     try {
@@ -244,8 +216,6 @@ export class CassandraClient {
     }
   }
 
-  // ─── Accessors ───────────────────────────────────────────────────────────────
-
   get ready(): boolean {
     return this.isReady;
   }
@@ -254,8 +224,6 @@ export class CassandraClient {
     return this.client;
   }
 }
-
-// ─── Singleton ────────────────────────────────────────────────────────────────
 
 let instance: CassandraClient | null = null;
 

@@ -15,12 +15,9 @@ const achievementSchema = new Schema<IAchievement>(
   { timestamps: false },
 );
 
-// ─── Indexes ──────────────────────────────────────────────────────────────────
-
-// Compound unique — a user can only earn each achievement type once
 achievementSchema.index({ userId: 1, achievementType: 1 }, { unique: true });
-achievementSchema.index({ userId: 1, earnedAt: -1 }); // user achievement history
-achievementSchema.index({ medalTier: 1 }); // leaderboard by tier
+achievementSchema.index({ userId: 1, earnedAt: -1 });
+achievementSchema.index({ medalTier: 1 });
 
 export const AchievementModel = model<IAchievement>('Achievement', achievementSchema);
 export default AchievementModel;

@@ -2,17 +2,9 @@ import type { Response, NextFunction } from 'express';
 
 import type { RequestWithUser } from '@interfaces/auth.interface';
 import { GroupChatService } from '@services/groupChat.service';
-import type {
-  CreateGroupDto,
-  AddMembersDto,
-  RemoveMemberDto,
-  UpdateGroupDto,
-  GetGroupsQueryDto,
-} from '@dtos/chat.dto';
+import type { CreateGroupDto, AddMembersDto, RemoveMemberDto, UpdateGroupDto, GetGroupsQueryDto } from '@dtos/chat.dto';
 
 const svc = new GroupChatService();
-
-// ─── POST /api/chat/groups ────────────────────────────────────────────────────
 
 export const createGroup = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -31,8 +23,6 @@ export const createGroup = async (req: RequestWithUser, res: Response, next: Nex
   }
 };
 
-// ─── GET /api/chat/groups ─────────────────────────────────────────────────────
-
 export const getGroups = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { lastGroupId, limit } = req.query as GetGroupsQueryDto;
@@ -47,8 +37,6 @@ export const getGroups = async (req: RequestWithUser, res: Response, next: NextF
   }
 };
 
-// ─── GET /api/chat/groups/:groupId ────────────────────────────────────────────
-
 export const getGroupById = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { groupId } = req.params as { groupId: string };
@@ -58,8 +46,6 @@ export const getGroupById = async (req: RequestWithUser, res: Response, next: Ne
     next(err);
   }
 };
-
-// ─── POST /api/chat/groups/:groupId/members ───────────────────────────────────
 
 export const addMembers = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -76,8 +62,6 @@ export const addMembers = async (req: RequestWithUser, res: Response, next: Next
   }
 };
 
-// ─── DELETE /api/chat/groups/:groupId/members ─────────────────────────────────
-
 export const removeMember = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { groupId } = req.params as { groupId: string };
@@ -93,8 +77,6 @@ export const removeMember = async (req: RequestWithUser, res: Response, next: Ne
   }
 };
 
-// ─── POST /api/chat/groups/:groupId/leave ─────────────────────────────────────
-
 export const leaveGroup = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { groupId } = req.params as { groupId: string };
@@ -107,8 +89,6 @@ export const leaveGroup = async (req: RequestWithUser, res: Response, next: Next
     next(err);
   }
 };
-
-// ─── PATCH /api/chat/groups/:groupId ──────────────────────────────────────────
 
 export const updateGroup = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {

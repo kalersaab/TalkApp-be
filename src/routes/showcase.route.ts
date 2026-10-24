@@ -17,16 +17,12 @@ export class ShowcaseRoute implements Routes {
   private initializeRoutes(): void {
     this.router.use(AuthMiddleware);
 
-    // GET /api/showcase/inventory
     this.router.get(`${this.path}/inventory`, getInventory);
 
-    // GET /api/showcase/catalogue
     this.router.get(`${this.path}/catalogue`, getCatalogue);
 
-    // GET /api/showcase/catalogue/:itemId
     this.router.get(`${this.path}/catalogue/:itemId`, getCatalogueItem);
 
-    // POST /api/showcase/equip
     this.router.post(`${this.path}/equip`, validationMiddleware(EquipItemDto, 'body'), equipItem);
   }
 }

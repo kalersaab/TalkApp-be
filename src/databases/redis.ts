@@ -14,11 +14,7 @@ import type {
 } from '@interfaces/redis.interface';
 import { RedisError } from '@interfaces/redis.interface';
 
-// ─── Key patterns ─────────────────────────────────────────────────────────────
-// All keys are prefixed with REDIS_KEY_PREFIX (default 'talkapp:') to avoid
-// collisions when sharing a Redis instance across services.
-
-const NS = (REDIS_KEY_PREFIX ?? 'talkapp:').replace(/:$/, ''); // strip trailing colon
+const NS = (REDIS_KEY_PREFIX ?? 'talkapp:').replace(/:$/, '');
 
 export const KEYS = {
   PROFILE: (userId: string) => `${NS}:profile:${userId}`,
@@ -30,21 +26,17 @@ export const KEYS = {
   STREAK: (userId: string) => `${NS}:streak:${userId}`,
   ONLINE_SET: `${NS}:online_users`,
   REFRESH_TOKEN: (tokenHash: string) => `${NS}:refresh:${tokenHash}`,
-  USER_TOKENS: (userId: string) => `${NS}:user_tokens:${userId}`, // Tracks all tokens for a user
+  USER_TOKENS: (userId: string) => `${NS}:user_tokens:${userId}`,
 } as const;
-
-// ─── TTL constants (seconds) ──────────────────────────────────────────────────
 
 export const TTL = {
-  PROFILE: 10 * 24 * 3600, // 10days
-  TRANSLATION: 30 * 24 * 3600, // 30 days
-  INVENTORY: 10 * 60, // 10 minutes
-  STREAK: 25 * 3600, // 25 hours
-  PRESENCE: 30, // 30 seconds — refreshed on heartbeat
-  REFRESH_TOKEN: 30 * 24 * 3600, //30 days
+  PROFILE: 10 * 24 * 3600,
+  TRANSLATION: 30 * 24 * 3600,
+  INVENTORY: 10 * 60,
+  STREAK: 25 * 3600,
+  PRESENCE: 30,
+  REFRESH_TOKEN: 30 * 24 * 3600,
 } as const;
-
-// ─── Client factory ───────────────────────────────────────────────────────────
 
 type RedisClient = Redis | Cluster;
 
@@ -59,11 +51,11 @@ const COMMON_OPTIONS = {
   password: REDIS_PASSWORD || undefined,
   enableReadyCheck: true,
   maxRetriesPerRequest: 3,
-  commandTimeout: 5000, // 5s timeout for any Redis command
+  commandTimeout: 5000,
   retryStrategy: (times: number): number | null => {
     if (times > 10) {
       logger.error('[Redis] Max reconnect attempts reached');
-      return null; // stop retrying
+      return null;
     }
     const delay = Math.min(500 * 2 ** (times - 1), 30_000);
     logger.warn(`[Redis] Reconnecting in ${delay}ms (attempt ${times})`);
@@ -79,8 +71,6 @@ function createClient(purpose: 'data' | 'sub'): RedisClient {
     const client = new Cluster(nodes, {
       redisOptions: {
         ...COMMON_OPTIONS,
-        // Subscriber clients must not be used for regular commands —
-        // ioredis enforces this automatically for Cluster in subscribe mode.
       },
       scaleReads: purpose === 'data' ? 'slave' : 'master',
       enableOfflineQueue: true,
@@ -94,7 +84,7 @@ function createClient(purpose: 'data' | 'sub'): RedisClient {
     host: REDIS_HOST ?? '127.0.0.1',
     port: parseInt(REDIS_PORT ?? '6379', 10),
     ...COMMON_OPTIONS,
-    // Lazy connect — we call .connect() explicitly in redisConnect()
+
     lazyConnect: true,
   });
   attachListeners(client, `Redis[${purpose}]`);
@@ -110,20 +100,13 @@ function attachListeners(client: RedisClient, label: string): void {
   client.on('end', () => logger.warn(`[${label}] Connection ended`));
 }
 
-// ─── RedisService ─────────────────────────────────────────────────────────────
-
 export class RedisService {
   get() {
     throw new Error('Method not implemented.');
   }
-  /** General-purpose client: cache, presence, rate limiting, data ops */
+
   private readonly data: RedisClient;
 
-  /**
-   * Dedicated pub/sub client.
-   * Once a client issues SUBSCRIBE it can ONLY run subscribe/unsubscribe/ping.
-   * Keeping it separate means the data client stays fully usable.
-   */
   private readonly sub: RedisClient;
 
   constructor() {
@@ -131,10 +114,7 @@ export class RedisService {
     this.sub = createClient('sub');
   }
 
-  // ─── Lifecycle ──────────────────────────────────────────────────────────────
-
   async connect(): Promise<void> {
-    // Cluster clients connect automatically; single-node needs explicit connect
     if (this.data instanceof Redis) await this.data.connect();
     if (this.sub instanceof Redis) await this.sub.connect();
     logger.info('[Redis] Both clients connected');
@@ -146,14 +126,6 @@ export class RedisService {
     logger.info('[Redis] Disconnected');
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PUB/SUB
-  // ══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Publish a chat message to a conversation channel.
-   * All WS nodes subscribed to this channel will receive it.
-   */
   async publishMessage(convId: string, payload: ConvMessagePayload): Promise<void> {
     try {
       await this.data.publish(KEYS.CONV_CHANNEL(convId), JSON.stringify(payload));
@@ -162,10 +134,6 @@ export class RedisService {
     }
   }
 
-  /**
-   * Subscribe this WS node to a conversation channel.
-   * `callback` is invoked for every message received on the channel.
-   */
   async subscribeToConversation(convId: string, callback: (payload: ConvMessagePayload) => void): Promise<void> {
     const channel = KEYS.CONV_CHANNEL(convId);
     try {
@@ -183,7 +151,6 @@ export class RedisService {
     }
   }
 
-  /** Unsubscribe from a conversation channel when the last participant leaves. */
   async unsubscribeFromConversation(convId: string): Promise<void> {
     try {
       await this.sub.unsubscribe(KEYS.CONV_CHANNEL(convId));
@@ -192,7 +159,6 @@ export class RedisService {
     }
   }
 
-  /** Publish a presence change (online/offline) to the presence channel. */
   async publishPresence(userId: string, status: UserStatus): Promise<void> {
     const payload: PresencePayload = {
       userId,
@@ -205,10 +171,6 @@ export class RedisService {
       throw new RedisError('publishPresence', err);
     }
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // CACHE
-  // ══════════════════════════════════════════════════════════════════════════
 
   async cacheProfile(userId: string, profileData: ProfileData, ttlSeconds = TTL.PROFILE): Promise<void> {
     try {
@@ -276,15 +238,6 @@ export class RedisService {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PRESENCE
-  // ══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Mark a user online. Stores wsNodeId + socketId as a Redis hash with a
-   * 30-second TTL. The TTL is refreshed on every heartbeat via refreshPresence().
-   * If the process crashes, the key expires automatically — no stale presence.
-   */
   async setUserOnline(userId: string, wsNodeId: string, socketId: string): Promise<void> {
     const key = KEYS.PRESENCE(userId);
     try {
@@ -329,7 +282,6 @@ export class RedisService {
     }
   }
 
-  /** Reset the 30-second TTL — call this on every WS heartbeat. */
   async refreshPresence(userId: string): Promise<void> {
     try {
       await this.data.expire(KEYS.PRESENCE(userId), TTL.PRESENCE);
@@ -338,7 +290,6 @@ export class RedisService {
     }
   }
 
-  /** Returns the count of users currently in the online set. */
   async getOnlineCount(): Promise<number> {
     try {
       return await this.data.scard(KEYS.ONLINE_SET);
@@ -346,10 +297,6 @@ export class RedisService {
       throw new RedisError('getOnlineCount', err);
     }
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // STREAK CACHE
-  // ══════════════════════════════════════════════════════════════════════════
 
   async getStreak(userId: string): Promise<StreakData | null> {
     try {
@@ -376,15 +323,6 @@ export class RedisService {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // HYBRID AUTHENTICATION SESSIONS
-  // ══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Save an active refresh token session state hash to memory.
-   *
-   */
-
   async setRefreshTokenSession(
     tokenHash: string,
     sessionData: { userId: string; used: boolean; family: string; isCompromised?: boolean },
@@ -392,11 +330,11 @@ export class RedisService {
   ): Promise<void> {
     try {
       const pipeline = this.data.pipeline();
-      // 1. Store the token session data
+
       pipeline.set(KEYS.REFRESH_TOKEN(tokenHash), JSON.stringify(sessionData), 'EX', ttlSeconds);
-      // 2. Add to user's token set (for quick invalidation)
+
       pipeline.sadd(KEYS.USER_TOKENS(sessionData.userId), tokenHash);
-      // 3. Set expiry on user token set (same TTL as token)
+
       pipeline.expire(KEYS.USER_TOKENS(sessionData.userId), ttlSeconds);
       await pipeline.exec();
     } catch (err) {
@@ -404,15 +342,10 @@ export class RedisService {
     }
   }
 
-  /**
-   * Look up a refresh token session state details by its signature hash.
-   * Uses Lua script to atomically retrieve and delete the token in one operation.
-   * This prevents reuse of the same refresh token across multiple requests.
-   */
   async consumeRefreshTokenSession(tokenHash: string): Promise<{ userId: string; family: string; used: boolean; isCompromised?: boolean } | null> {
     try {
       const key = KEYS.REFRESH_TOKEN(tokenHash);
-      // Lua script: GET then DEL atomically
+
       const raw = (await this.data.eval(
         `
           local value = redis.call('GET', KEYS[1])
@@ -431,9 +364,6 @@ export class RedisService {
     }
   }
 
-  /**
-   * Invalidate a refresh token session by deleting it from Redis
-   */
   async invalidateRefreshTokenSession(tokenHash: string): Promise<void> {
     try {
       await this.data.del(KEYS.REFRESH_TOKEN(tokenHash));
@@ -442,32 +372,21 @@ export class RedisService {
     }
   }
 
-  /**
-   * 🚀 PERFORMANCE OPTIMIZATION: Invalidate all refresh tokens for a user
-   * Instead of scanning all tokens (KEYS command - O(N)),
-   * we maintain a set of user's tokens and delete them all in one batch.
-   *
-   * This is 100-1000x faster than scanning all keys:
-   * - Before: KEYS scan + multiple DEL commands (~50-100ms)
-   * - After: SMEMBERS + batch DEL (~1-2ms)
-   */
   async invalidateUserRefreshTokens(userId: string): Promise<void> {
     try {
       const userTokensKey = KEYS.USER_TOKENS(userId);
 
-      // Get all token hashes for this user
       const tokenHashes = await this.data.smembers(userTokensKey);
 
       if (tokenHashes.length === 0) {
-        return; // No tokens to invalidate
+        return;
       }
 
-      // Delete all token sessions in one batch
       const pipeline = this.data.pipeline();
       for (const tokenHash of tokenHashes) {
         pipeline.del(KEYS.REFRESH_TOKEN(tokenHash));
       }
-      // Also delete the user's token set
+
       pipeline.del(userTokensKey);
       await pipeline.exec();
 
@@ -477,28 +396,6 @@ export class RedisService {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // RATE LIMITING  — sliding window via sorted set
-  // ══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Sliding-window rate limiter using a Redis sorted set.
-   *
-   * Each request is stored as a member with score = timestamp (ms).
-   * On every call we:
-   *   1. Remove members older than the window
-   *   2. Count remaining members
-   *   3. If count < limit → add this request and allow
-   *   4. Otherwise → deny
-   *
-   * This is O(log N) per call and gives a true sliding window,
-   * unlike the fixed-window INCR approach which allows 2× burst at boundaries.
-   *
-   * Usage examples:
-   *   checkRateLimit(`${userId}:message`,     60,  60)   // 60 msgs/min
-   *   checkRateLimit(`${userId}:translation`, 200, 60)   // 200 translations/min
-   *   checkRateLimit(`${userId}:follow`,      30,  60)   // 30 follows/min
-   */
   async checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
     const redisKey = KEYS.RATE_LIMIT(key, 'window');
     const now = Date.now();
@@ -507,22 +404,20 @@ export class RedisService {
 
     try {
       const pipeline = this.data.pipeline();
-      // 1. Remove expired entries
+
       pipeline.zremrangebyscore(redisKey, '-inf', windowStart);
-      // 2. Count current entries
+
       pipeline.zcard(redisKey);
-      // 3. Add this request (score = timestamp, member = unique id)
+
       pipeline.zadd(redisKey, now, `${now}-${Math.random()}`);
-      // 4. Set TTL so the key self-cleans
+
       pipeline.expire(redisKey, windowSeconds + 1);
 
       const results = await pipeline.exec();
 
-      // zcard result is at index 1
       const currentCount = (results?.[1]?.[1] as number) ?? 0;
 
       if (currentCount >= limit) {
-        // Undo the zadd — we're not allowing this request
         await this.data.zpopmax(redisKey);
         return { allowed: false, remaining: 0, resetAt };
       }
@@ -537,10 +432,6 @@ export class RedisService {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // HEALTH CHECK
-  // ══════════════════════════════════════════════════════════════════════════
-
   async healthCheck(): Promise<{ status: 'ok' | 'error'; latencyMs: number }> {
     const start = Date.now();
     try {
@@ -551,26 +442,14 @@ export class RedisService {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ACCESSORS
-  // ══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Get the general-purpose data client for direct Redis operations
-   */
   getDataClient(): RedisClient {
     return this.data;
   }
 
-  /**
-   * Get the pub/sub client for subscriptions
-   */
   getSubClient(): RedisClient {
     return this.sub;
   }
 }
-
-// ─── Singleton ────────────────────────────────────────────────────────────────
 
 let instance: RedisService | null = null;
 

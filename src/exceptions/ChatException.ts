@@ -1,7 +1,5 @@
 import { HttpException } from './HttpException';
 
-// ─── Cassandra errors ─────────────────────────────────────────────────────────
-
 export class CassandraWriteError extends Error {
   constructor(public readonly operation: string, public readonly cause: unknown) {
     super(`Cassandra write [${operation}] failed: ${(cause as Error)?.message ?? String(cause)}`);
@@ -15,8 +13,6 @@ export class CassandraReadError extends Error {
     this.name = 'CassandraReadError';
   }
 }
-
-// ─── Domain errors (extend HttpException so error middleware handles them) ────
 
 export class ConversationNotFoundError extends HttpException {
   constructor(convId: string) {

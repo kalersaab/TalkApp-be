@@ -6,8 +6,6 @@ import type { EquipItemDto } from '@dtos/showcase.dto';
 
 const svc = new ShowcaseService();
 
-// ─── GET /api/showcase/inventory ─────────────────────────────────────────────
-
 export const getInventory = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const data = await svc.getInventory(req.user._id.toString());
@@ -16,8 +14,6 @@ export const getInventory = async (req: RequestWithUser, res: Response, next: Ne
     next(err);
   }
 };
-
-// ─── GET /api/showcase/catalogue ─────────────────────────────────────────────
 
 export const getCatalogue = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -28,8 +24,6 @@ export const getCatalogue = async (req: RequestWithUser, res: Response, next: Ne
   }
 };
 
-// ─── GET /api/showcase/catalogue/:itemId ─────────────────────────────────────
-
 export const getCatalogueItem = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { itemId } = req.params as { itemId: string };
@@ -39,8 +33,6 @@ export const getCatalogueItem = async (req: RequestWithUser, res: Response, next
     next(err);
   }
 };
-
-// ─── POST /api/showcase/equip ─────────────────────────────────────────────────
 
 export const equipItem = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {

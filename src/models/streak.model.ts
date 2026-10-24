@@ -11,10 +11,8 @@ const streakSchema = new Schema<IStreak>(
   { timestamps: { createdAt: false, updatedAt: true } },
 );
 
-// ─── Indexes ──────────────────────────────────────────────────────────────────
-
 streakSchema.index({ userId: 1 }, { unique: true });
-streakSchema.index({ currentStreak: -1 }); // streak leaderboard
+streakSchema.index({ currentStreak: -1 });
 
 export const StreakModel = model<IStreak>('Streak', streakSchema);
 export default StreakModel;

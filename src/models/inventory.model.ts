@@ -29,8 +29,6 @@ const inventorySchema = new Schema<IInventory>(
   { timestamps: { createdAt: false, updatedAt: true } },
 );
 
-// ─── Indexes ──────────────────────────────────────────────────────────────────
-
 inventorySchema.index({ userId: 1 }, { unique: true });
 inventorySchema.index({ collectorRank: 1 });
 

@@ -23,15 +23,12 @@ import type {
 export class ExtendedProfileService {
   private redis = getRedisService();
 
-  // ─── Get Extended Profile ─────────────────────────────────────────────────────
-
   public async getExtendedProfile(userId: string): Promise<{
     user: Partial<IUser>;
     profile: IUserProfile | null;
     completionPercentage: number;
   }> {
     try {
-      // Check cache first
       const cachedProfile = await this.redis.getProfile(userId);
       if (cachedProfile) {
         return cachedProfile as {
@@ -41,7 +38,6 @@ export class ExtendedProfileService {
         };
       }
 
-      // Get user basic info and extended profile
       const [user, profile] = await Promise.all([
         UserModel.findById(userId)
           .select('displayName username email avatarUrl nativeLang learningLangs gender dateOfBirth bio location isVerified createdAt')
@@ -59,7 +55,6 @@ export class ExtendedProfileService {
         completionPercentage: profile?.completionPercentage || 0,
       };
 
-      // Cache for 5 minutes (cast to generic ProfileData type)
       await this.redis.cacheProfile(userId, result as Record<string, unknown>, 5 * 60);
 
       return result;
@@ -68,8 +63,6 @@ export class ExtendedProfileService {
       throw err;
     }
   }
-
-  // ─── Update Basic Profile Info ────────────────────────────────────────────────
 
   public async updateBasicInfo(
     userId: string,
@@ -82,30 +75,25 @@ export class ExtendedProfileService {
       const updates: any = {};
       const userUpdates: any = {};
 
-      // Handle displayName (update in User model)
       if (updateData.displayName !== undefined) {
         userUpdates.displayName = updateData.displayName;
       }
 
-      // Handle profile fields
       if (updateData.selfIntroduction !== undefined) {
         updates.selfIntroduction = updateData.selfIntroduction;
       }
       if (updateData.bio !== undefined) {
         updates.bio = updateData.bio;
-        userUpdates.bio = updateData.bio; // Also update in User model for compatibility
+        userUpdates.bio = updateData.bio;
       }
 
-      // Update user model if needed
       let user = null;
       if (Object.keys(userUpdates).length > 0) {
         user = await UserModel.findByIdAndUpdate(userId, { $set: userUpdates }, { new: true }).select('displayName username email avatarUrl bio');
       }
 
-      // Update or create profile
       const profile = await UserProfileModel.findOneAndUpdate({ userId }, { $set: updates }, { new: true, upsert: true });
 
-      // Invalidate cache
       await this.redis.invalidateProfile(userId);
 
       logger.info(`[ExtendedProfile] Basic info updated for user ${userId}`);
@@ -116,64 +104,49 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Update Languages ─────────────────────────────────────────────────────────
+  public async updateLanguages(userId: string, updateData: UpdateLanguagesDto): Promise<Partial<IUser>> {
+    try {
+      const userUpdates: Record<string, any> = {};
 
- public async updateLanguages(userId: string, updateData: UpdateLanguagesDto): Promise<Partial<IUser>> {
-  try {
-    const userUpdates: Record<string, any> = {};
+      if (updateData.nativeLanguage !== undefined) {
+        userUpdates.nativeLang = updateData.nativeLanguage;
+      }
 
-    // Build update payload
-    if (updateData.nativeLanguage !== undefined) {
-      userUpdates.nativeLang = updateData.nativeLanguage;
+      if (updateData.learningLanguages !== undefined) {
+        userUpdates.learningLangs = updateData.learningLanguages;
+      }
+
+      if (updateData.proficiencyLevels && Object.keys(updateData.proficiencyLevels).length > 0) {
+        userUpdates.proficiencyLevels = updateData.proficiencyLevels;
+      }
+
+      if (Object.keys(userUpdates).length === 0) {
+        return {};
+      }
+
+      const result = await UserModel.updateOne({ _id: userId }, { $set: userUpdates }).exec();
+
+      if (result.matchedCount === 0) {
+        throw new HttpException(404, 'User not found');
+      }
+
+      this.redis.invalidateProfile(userId).catch(err => {
+        logger.warn(`[Redis] Cache invalidation failed for ${userId}: ${err.message}`);
+      });
+
+      return {
+        _id: userId,
+        ...userUpdates,
+      };
+    } catch (err) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+
+      logger.error(`[ExtendedProfile] Update languages failed: ${(err as Error).message}`);
+      throw new HttpException(500, 'Failed to update language information');
     }
-
-    if (updateData.learningLanguages !== undefined) {
-      userUpdates.learningLangs = updateData.learningLanguages;
-    }
-
-    if (updateData.proficiencyLevels && Object.keys(updateData.proficiencyLevels).length > 0) {
-      userUpdates.proficiencyLevels = updateData.proficiencyLevels;
-    }
-
-    // Fast-path: Return empty immediately if no fields provided
-    if (Object.keys(userUpdates).length === 0) {
-      return {};
-    }
-
-    // OPTIMIZATION 1: Use updateOne instead of findByIdAndUpdate
-    // Prevents MongoDB from having to fetch and serialize the document back to Node.js
-    const result = await UserModel.updateOne(
-      { _id: userId },
-      { $set: userUpdates }
-    ).exec();
-
-    if (result.matchedCount === 0) {
-      throw new HttpException(404, 'User not found');
-    }
-
-    // OPTIMIZATION 2: Properly fire-and-forget cache invalidation
-    // Using void to explicitly indicate we don't care about the result
-    this.redis.invalidateProfile(userId).catch((err) => {
-      logger.warn(`[Redis] Cache invalidation failed for ${userId}: ${err.message}`);
-    });
-
-    // Return only updated fields constructed in-memory
-    return {
-      _id: userId,
-      ...userUpdates,
-    };
-  } catch (err) {
-    // FIX: Preserve existing HttpExceptions (e.g., 404)
-    if (err instanceof HttpException) {
-      throw err;
-    }
-
-    logger.error(`[ExtendedProfile] Update languages failed: ${(err as Error).message}`);
-    throw new HttpException(500, 'Failed to update language information');
   }
-}
-
-  // ─── Update Interests & Hobbies ───────────────────────────────────────────────
 
   public async updateInterests(userId: string, updateData: UpdateInterestsDto): Promise<IUserProfile> {
     try {
@@ -194,8 +167,6 @@ export class ExtendedProfileService {
       throw new HttpException(500, 'Failed to update interests and hobbies');
     }
   }
-
-  // ─── Update Location & Places ─────────────────────────────────────────────────
 
   public async updateLocation(userId: string, updateData: UpdateLocationDto): Promise<IUserProfile> {
     try {
@@ -229,8 +200,6 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Update Occupation ────────────────────────────────────────────────────────
-
   public async updateOccupation(userId: string, updateData: UpdateOccupationDto): Promise<IUserProfile> {
     try {
       const profile = await UserProfileModel.findOneAndUpdate(
@@ -249,8 +218,6 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Update Personal Info (One-time edit) ─────────────────────────────────────
-
   public async updatePersonalInfo(
     userId: string,
     updateData: UpdatePersonalInfoDto,
@@ -259,7 +226,6 @@ export class ExtendedProfileService {
     profile: IUserProfile;
   }> {
     try {
-      // Check if gender/birthday already set (one-time edit restriction)
       const existingProfile = await UserProfileModel.findOne({ userId });
 
       if (updateData.gender && existingProfile?.gender) {
@@ -282,11 +248,8 @@ export class ExtendedProfileService {
         const birthday = new Date(updateData.birthday);
         updates.birthday = birthday;
         userUpdates.dateOfBirth = birthday;
-
-        // Auto-calculate zodiac sign (will be handled in pre-save hook)
       }
 
-      // Update both models
       const [user, profile] = await Promise.all([
         Object.keys(userUpdates).length > 0
           ? UserModel.findByIdAndUpdate(userId, { $set: userUpdates }, { new: true }).select('displayName username gender dateOfBirth')
@@ -305,8 +268,6 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Update Psychology ────────────────────────────────────────────────────────
-
   public async updatePsychology(userId: string, updateData: UpdatePsychologyDto): Promise<IUserProfile> {
     try {
       const profile = await UserProfileModel.findOneAndUpdate({ userId }, { $set: { mbtiType: updateData.mbtiType } }, { new: true, upsert: true });
@@ -321,11 +282,8 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Update Username ──────────────────────────────────────────────────────────
-
   public async updateUsername(userId: string, updateData: UpdateUsernameDto): Promise<{ user: Partial<IUser> }> {
     try {
-      // Check if username is available
       const existingUser = await UserModel.findOne({
         username: updateData.username,
         _id: { $ne: userId },
@@ -354,8 +312,6 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Check Username Availability ──────────────────────────────────────────────
-
   public async checkUsernameAvailability(
     username: string,
     excludeUserId?: string,
@@ -364,10 +320,8 @@ export class ExtendedProfileService {
     message: string;
   }> {
     try {
-      // Query to find existing user with this username
       const query: any = { username };
 
-      // If excludeUserId is provided, exclude that user (for update scenarios)
       if (excludeUserId) {
         query._id = { $ne: excludeUserId };
       }
@@ -391,29 +345,23 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Profile Pictures Management ──────────────────────────────────────────────
-
   public async uploadProfilePicture(userId: string, updateData: UploadProfilePictureDto): Promise<IUserProfile> {
     try {
       const profile = (await UserProfileModel.findOne({ userId })) || new UserProfileModel({ userId, profilePictures: [] });
 
-      // Check if max pictures reached
       if (profile.profilePictures.length >= 4) {
         throw new HttpException(400, 'Maximum 4 profile pictures allowed');
       }
 
-      // If setting as primary, unset all other primary flags
       if (updateData.isPrimary) {
         profile.profilePictures.forEach(pic => (pic.isPrimary = false));
 
-        // Also update main avatarUrl in User model
         await UserModel.findByIdAndUpdate(userId, { avatarUrl: updateData.url });
       }
 
-      // Add new picture
       profile.profilePictures.push({
         url: updateData.url,
-        isPrimary: updateData.isPrimary || profile.profilePictures.length === 0, // First picture is primary by default
+        isPrimary: updateData.isPrimary || profile.profilePictures.length === 0,
         uploadedAt: new Date(),
       });
 
@@ -436,19 +384,15 @@ export class ExtendedProfileService {
         throw new HttpException(404, 'Profile not found');
       }
 
-      // Find the picture
       const pictureIndex = profile.profilePictures.findIndex(pic => pic.url === updateData.url);
       if (pictureIndex === -1) {
         throw new HttpException(404, 'Picture not found');
       }
 
-      // Unset all primary flags
       profile.profilePictures.forEach(pic => (pic.isPrimary = false));
 
-      // Set new primary
       profile.profilePictures[pictureIndex].isPrimary = true;
 
-      // Update main avatarUrl in User model
       await Promise.all([profile.save(), UserModel.findByIdAndUpdate(userId, { avatarUrl: updateData.url })]);
 
       await this.redis.invalidateProfile(userId);
@@ -469,7 +413,6 @@ export class ExtendedProfileService {
         throw new HttpException(404, 'Profile not found');
       }
 
-      // Find and remove the picture
       const pictureIndex = profile.profilePictures.findIndex(pic => pic.url === updateData.url);
       if (pictureIndex === -1) {
         throw new HttpException(404, 'Picture not found');
@@ -478,7 +421,6 @@ export class ExtendedProfileService {
       const wasPrimary = profile.profilePictures[pictureIndex].isPrimary;
       profile.profilePictures.splice(pictureIndex, 1);
 
-      // If deleted picture was primary, set first remaining as primary
       if (wasPrimary && profile.profilePictures.length > 0) {
         profile.profilePictures[0].isPrimary = true;
         await UserModel.findByIdAndUpdate(userId, { avatarUrl: profile.profilePictures[0].url });
@@ -498,8 +440,6 @@ export class ExtendedProfileService {
     }
   }
 
-  // ─── Complete Profile Update ──────────────────────────────────────────────────
-
   public async updateCompleteProfile(
     userId: string,
     updateData: UpdateCompleteProfileDto,
@@ -511,7 +451,6 @@ export class ExtendedProfileService {
       const userUpdates: any = {};
       const profileUpdates: any = {};
 
-      // User model fields
       if (updateData.displayName !== undefined) {
         userUpdates.displayName = updateData.displayName;
       }
@@ -530,14 +469,12 @@ export class ExtendedProfileService {
         userUpdates.proficiencyLevels = new Map(Object.entries(updateData.proficiencyLevels));
       }
 
-      // Profile model fields
       Object.keys(updateData).forEach(key => {
         if (!['displayName'].includes(key)) {
           profileUpdates[key] = updateData[key as keyof UpdateCompleteProfileDto];
         }
       });
 
-      // Update both models in parallel
       const [user, profile] = await Promise.all([
         Object.keys(userUpdates).length > 0
           ? UserModel.findByIdAndUpdate(userId, { $set: userUpdates }, { new: true }).select(
@@ -556,8 +493,6 @@ export class ExtendedProfileService {
       throw new HttpException(500, 'Failed to update complete profile');
     }
   }
-
-  // ─── Get Profile Completion Status ────────────────────────────────────────────
 
   public async getProfileCompletionStatus(userId: string): Promise<{
     completionPercentage: number;
@@ -612,7 +547,6 @@ export class ExtendedProfileService {
 
       const missingFields: string[] = [];
 
-      // Check each field
       if (!profile.selfIntroduction) missingFields.push('selfIntroduction');
       if (!profile.bio) missingFields.push('bio');
       if (!profile.teachingLanguages?.length) missingFields.push('teachingLanguages');
@@ -628,7 +562,6 @@ export class ExtendedProfileService {
       if (!profile.profilePictures?.length) missingFields.push('profilePictures');
       if (!profile.currentLocation?.city) missingFields.push('currentLocation');
 
-      // Calculate section completion
       const sections = {
         basicInfo: !!(profile.selfIntroduction && profile.bio),
         languages: !!(profile.teachingLanguages?.length && profile.learningLanguages?.length),

@@ -17,11 +17,6 @@ export function getQdrantClient(): QdrantClient {
   return client;
 }
 
-/**
- * Returns true if Qdrant is reachable.
- * Used to gate vector ranking — if Qdrant is down we fall back to
- * MongoDB-only results without crashing.
- */
 export async function isQdrantAvailable(): Promise<boolean> {
   try {
     await getQdrantClient().getCollections();
@@ -32,10 +27,6 @@ export async function isQdrantAvailable(): Promise<boolean> {
   }
 }
 
-/**
- * Fetch the bio embedding vector for a user.
- * Returns null if the point doesn't exist yet (user hasn't set a bio).
- */
 export async function getUserVector(userId: string): Promise<number[] | null> {
   try {
     const result = await getQdrantClient().retrieve(COLLECTION, {

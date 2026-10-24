@@ -27,11 +27,7 @@ import type {
   LeaveGroupPayload,
 } from '@interfaces/socket.interface';
 
-// ─── Rate limit config ────────────────────────────────────────────────────────
-
 const RATE = { MESSAGE: { limit: 60, window: 60 } } as const;
-
-// ─── Circuit breakers ─────────────────────────────────────────────────────────
 
 const cassandraBreaker = new CircuitBreaker({
   name: 'cassandra-write',
@@ -47,12 +43,8 @@ const redisBreaker = new CircuitBreaker({
   timeout: 15_000,
 });
 
-// ─── Typed aliases ────────────────────────────────────────────────────────────
-
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
-
-// ─── ChatGateway ──────────────────────────────────────────────────────────────
 
 export class ChatGateway {
   private io: AppServer;
@@ -73,8 +65,6 @@ export class ChatGateway {
       maxHttpBufferSize: 1e6,
     });
 
-    // Register in the global registry so other services can emit without
-    // importing this file (avoids circular dependencies)
     registerGateway(this.io);
 
     this.attachRedisAdapter();
@@ -82,12 +72,10 @@ export class ChatGateway {
     this.attachConnectionHandler();
   }
 
-  // ─── Redis adapter ────────────────────────────────────────────────────────
-
   private attachRedisAdapter(): void {
     try {
       const redis = getRedisService();
-      // Access the two underlying ioredis clients via the private fields
+
       const pubClient = (redis as unknown as { data: unknown }).data;
       const subClient = (redis as unknown as { sub: unknown }).sub;
       if (pubClient && subClient) {
@@ -98,8 +86,6 @@ export class ChatGateway {
       logger.warn(`[ChatGateway] Redis adapter skipped: ${(err as Error).message}`);
     }
   }
-
-  // ─── JWT auth middleware ──────────────────────────────────────────────────
 
   private attachAuthMiddleware(): void {
     this.io.use((socket, next) => {
@@ -118,22 +104,17 @@ export class ChatGateway {
     });
   }
 
-  // ─── Connection handler ───────────────────────────────────────────────────
-
   private attachConnectionHandler(): void {
     this.io.on('connection', (socket: AppSocket) => {
       const { userId } = socket.data;
       logger.info(`[ChatGateway] connected userId=${userId} socketId=${socket.id}`);
 
-      // Join personal room for direct pushes (achievements, notifications)
       void socket.join(`user:${userId}`);
 
-      // Mark online in Redis
       void getRedisService()
         .setUserOnline(userId, WS_NODE_ID, socket.id)
         .catch(err => logger.error(`[ChatGateway] setUserOnline: ${(err as Error).message}`));
 
-      // Flush offline messages
       void this.flushOfflineQueue(socket);
 
       socket.emit('connected', { serverTime: new Date().toISOString(), userId });
@@ -149,13 +130,10 @@ export class ChatGateway {
     });
   }
 
-  // ─── send_message ─────────────────────────────────────────────────────────
-
   private async handleSendMessage(socket: AppSocket, payload: SendMessagePayload): Promise<void> {
     const { userId } = socket.data;
     const redis = getRedisService();
 
-    // Rate limit
     const rl = await redis
       .checkRateLimit(`${userId}:message`, RATE.MESSAGE.limit, RATE.MESSAGE.window)
       .catch(() => ({ allowed: true, remaining: 0, resetAt: 0 }));
@@ -168,10 +146,8 @@ export class ChatGateway {
       return;
     }
 
-    // Check if this is a group or 1-on-1 conversation
     const isGroup = await this.isGroupConversation(payload.convId);
 
-    // For groups, verify membership and permissions
     if (isGroup) {
       const isMember = await this.groupSvc.checkMembership(payload.convId, userId);
       if (!isMember) {
@@ -179,7 +155,6 @@ export class ChatGateway {
         return;
       }
 
-      // Check if only admins can post
       const group = await GroupConversationModel.findById(payload.convId).select('settings').lean();
       if (group?.settings.onlyAdminsCanPost) {
         const isAdmin = await this.groupSvc.isAdmin(payload.convId, userId);
@@ -189,7 +164,6 @@ export class ChatGateway {
         }
       }
     } else {
-      // For 1-on-1, verify user is a participant
       const conv = await ConversationModel.findById(payload.convId).select('participantIds').lean();
       if (!conv || !conv.participantIds.some(id => id.toString() === userId)) {
         socket.emit('error', { code: 'NOT_PARTICIPANT', message: 'You are not a participant in this conversation' });
@@ -197,7 +171,6 @@ export class ChatGateway {
       }
     }
 
-    // Persist to Cassandra
     let saved;
     try {
       saved = await cassandraBreaker.call(() =>
@@ -215,14 +188,12 @@ export class ChatGateway {
       return;
     }
 
-    // Ack to sender
     socket.emit('message_ack', {
       clientMsgId: payload.clientMsgId,
       msgId: saved.msgId,
       status: 'sent',
     });
 
-    // Fetch sender's equipped cosmetic items for the broadcast payload
     const senderEquipped = await this.showcaseSvc.getSenderEquipped(userId).catch(() => ({ chatBubble: null, chatBackground: null }));
 
     const broadcastPayload: NewMessagePayload = {
@@ -237,7 +208,6 @@ export class ChatGateway {
       senderEquipped,
     };
 
-    // Fan-out via Redis pub/sub
     try {
       await redisBreaker.call(() =>
         redis.publishMessage(payload.convId, {
@@ -250,21 +220,15 @@ export class ChatGateway {
         }),
       );
     } catch {
-      // Fallback: emit directly on this node
       socket.to(`conv:${payload.convId}`).emit('new_message', broadcastPayload);
     }
 
-    // Broadcast to conversation/group room on this node
     this.io.to(`conv:${payload.convId}`).emit('new_message', broadcastPayload);
 
-    // Update last message in MongoDB (for both 1-on-1 and groups)
     void this.updateLastMessage(payload.convId, userId, saved.content, saved.createdAt, isGroup);
 
-    // Update streak (non-blocking)
     void this.streakSvc.checkAndUpdateStreak(userId).catch(() => null);
   }
-
-  // ─── typing ───────────────────────────────────────────────────────────────
 
   private async handleTyping(socket: AppSocket, payload: TypingPayload, type: 'start' | 'stop'): Promise<void> {
     socket.to(`conv:${payload.convId}`).emit('typing', {
@@ -273,8 +237,6 @@ export class ChatGateway {
       type,
     });
   }
-
-  // ─── message_read ─────────────────────────────────────────────────────────
 
   private async handleMessageRead(socket: AppSocket, payload: MessageReadPayload): Promise<void> {
     try {
@@ -295,8 +257,6 @@ export class ChatGateway {
     });
   }
 
-  // ─── heartbeat ────────────────────────────────────────────────────────────
-
   private async handleHeartbeat(socket: AppSocket): Promise<void> {
     await getRedisService()
       .refreshPresence(socket.data.userId)
@@ -304,16 +264,12 @@ export class ChatGateway {
     socket.emit('heartbeat_ack');
   }
 
-  // ─── disconnect ───────────────────────────────────────────────────────────
-
   private async handleDisconnect(socket: AppSocket, reason: string): Promise<void> {
     logger.info(`[ChatGateway] disconnected userId=${socket.data.userId} reason=${reason}`);
     await getRedisService()
       .setUserOffline(socket.data.userId)
       .catch(err => logger.error(`[ChatGateway] setUserOffline: ${(err as Error).message}`));
   }
-
-  // ─── Offline queue flush ──────────────────────────────────────────────────
 
   private async flushOfflineQueue(socket: AppSocket): Promise<void> {
     const { userId } = socket.data;
@@ -326,7 +282,7 @@ export class ChatGateway {
       for (const item of queued) {
         try {
           const msg = JSON.parse(item.payload) as NewMessagePayload;
-          // Ensure senderEquipped is present (older queued messages may not have it)
+
           if (!msg.senderEquipped) {
             msg.senderEquipped = { chatBubble: null, chatBackground: null };
           }
@@ -343,8 +299,6 @@ export class ChatGateway {
     }
   }
 
-  // ─── Room management (called by conversation service) ─────────────────────
-
   joinConversation(socketId: string, convId: string): void {
     void this.io.sockets.sockets.get(socketId)?.join(`conv:${convId}`);
   }
@@ -352,8 +306,6 @@ export class ChatGateway {
   leaveConversation(socketId: string, convId: string): void {
     void this.io.sockets.sockets.get(socketId)?.leave(`conv:${convId}`);
   }
-
-  // ─── Group Management ─────────────────────────────────────────────────────
 
   private async handleJoinGroup(socket: AppSocket, payload: JoinGroupPayload): Promise<void> {
     const { userId } = socket.data;
@@ -378,8 +330,6 @@ export class ChatGateway {
     await socket.leave(`conv:${groupId}`);
     logger.info(`[ChatGateway] User ${socket.data.userId} left group room ${groupId}`);
   }
-
-  // ─── Helper Methods ───────────────────────────────────────────────────────
 
   private async isGroupConversation(convId: string): Promise<boolean> {
     try {
@@ -407,8 +357,6 @@ export class ChatGateway {
       logger.warn(`[ChatGateway] Failed to update last message: ${(err as Error).message}`);
     }
   }
-
-  // ─── Group Event Broadcasting ─────────────────────────────────────────────
 
   broadcastGroupMemberJoined(groupId: string, userId: string, displayName: string, avatarUrl: string | null): void {
     this.io.to(`conv:${groupId}`).emit('group_member_joined', {
@@ -447,8 +395,6 @@ export class ChatGateway {
     return this.io;
   }
 }
-
-// ─── Singleton ────────────────────────────────────────────────────────────────
 
 let gatewayInstance: ChatGateway | null = null;
 

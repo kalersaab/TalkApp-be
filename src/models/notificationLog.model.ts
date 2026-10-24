@@ -27,6 +27,6 @@ const notificationLogSchema = new Schema<INotificationLog>(
 );
 
 notificationLogSchema.index({ userId: 1, createdAt: -1 });
-notificationLogSchema.index({ status: 1, createdAt: -1 }); // for failure monitoring
+notificationLogSchema.index({ status: 1, createdAt: -1 });
 
 export const NotificationLogModel = model<INotificationLog>('NotificationLog', notificationLogSchema);

@@ -15,19 +15,14 @@ export class ChatRoute implements Routes {
   }
 
   private initializeRoutes(): void {
-    // All chat routes require authentication
     this.router.use(AuthMiddleware);
 
-    // GET /api/chat/conversations
     this.router.get(`${this.path}/conversations`, validationMiddleware(GetConversationsQueryDto, 'query', true), getConversations);
 
-    // POST /api/chat/conversations
     this.router.post(`${this.path}/conversations`, validationMiddleware(CreateConversationDto, 'body'), createConversation);
 
-    // GET /api/chat/conversations/:convId/messages
     this.router.get(`${this.path}/conversations/:convId/messages`, validationMiddleware(GetMessagesQueryDto, 'query', true), getMessages);
 
-    // DELETE /api/chat/conversations/:convId
     this.router.delete(`${this.path}/conversations/:convId`, deleteConversation);
   }
 }

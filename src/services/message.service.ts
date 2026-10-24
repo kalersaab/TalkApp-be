@@ -4,7 +4,7 @@ import { redisClient } from '@databases/redis';
 import { Message } from '@interfaces/message.interface';
 import { logger } from '@utils/logger';
 
-const CACHE_TTL_SECONDS = 60; // cached history expires after 60 s
+const CACHE_TTL_SECONDS = 60;
 
 function cacheKey(roomId: string, limit: number): string {
   return `messages:${roomId}:${limit}`;
@@ -24,8 +24,6 @@ export class MessageService {
 
     logger.info(`Message saved [room=${roomId}, id=${messageId}]`);
 
-    // Invalidate all cached history for this room so the next getMessages
-    // call fetches fresh data from Cassandra.
     try {
       const pattern = `messages:${roomId}:*`;
       const keys = await redisClient.keys(pattern);
@@ -51,7 +49,6 @@ export class MessageService {
   public async getMessages(roomId: string, limit = 50): Promise<Message[]> {
     const key = cacheKey(roomId, limit);
 
-    // 1. Try cache first
     try {
       const cached = await redisClient.get(key);
       if (cached) {
@@ -62,7 +59,6 @@ export class MessageService {
       logger.warn(`Redis read failed, falling back to Cassandra: ${(err as Error).message}`);
     }
 
-    // 2. Fetch from Cassandra
     const query = `
       SELECT room_id, created_at, message_id, sender_id, reciever_id, content, is_binary
       FROM messages
@@ -82,7 +78,6 @@ export class MessageService {
       created_at: row.created_at,
     }));
 
-    // 3. Populate cache
     try {
       await redisClient.set(key, JSON.stringify(messages), 'EX', CACHE_TTL_SECONDS);
       logger.info(`Cache populated for room ${roomId}`);

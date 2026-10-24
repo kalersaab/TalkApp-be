@@ -5,12 +5,9 @@ import type { RequestWithUser } from '@interfaces/auth.interface';
 import { ProfileService } from '@services/profile.service';
 import { CompleteProfileDto } from '@dtos/profile.dto';
 
-// Multer adds `file` to the request — extend locally
 type RequestWithFile = RequestWithUser & { file?: MulterFile };
 
 const svc = new ProfileService();
-
-// ─── POST /api/profile/complete ───────────────────────────────────────────────
 
 export const completeProfile = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -23,8 +20,6 @@ export const completeProfile = async (req: RequestWithUser, res: Response, next:
   }
 };
 
-// ─── GET /api/profile/:userId ─────────────────────────────────────────────────
-
 export const getProfile = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const targetId = (req.params as { userId: string }).userId;
@@ -34,8 +29,6 @@ export const getProfile = async (req: RequestWithUser, res: Response, next: Next
     next(err);
   }
 };
-
-// ─── GET /api/profile/me ──────────────────────────────────────────────────────
 
 export const getMyProfile = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -47,8 +40,6 @@ export const getMyProfile = async (req: RequestWithUser, res: Response, next: Ne
   }
 };
 
-// ─── PATCH /api/profile/me ────────────────────────────────────────────────────
-
 export const updateProfile = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const profile = await svc.updateProfile(req.user._id.toString(), req.body as never);
@@ -57,8 +48,6 @@ export const updateProfile = async (req: RequestWithUser, res: Response, next: N
     next(err);
   }
 };
-
-// ─── POST /api/profile/me/avatar ──────────────────────────────────────────────
 
 export const uploadAvatar = async (req: RequestWithFile, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -73,8 +62,6 @@ export const uploadAvatar = async (req: RequestWithFile, res: Response, next: Ne
   }
 };
 
-// ─── GET /api/profile/:userId/posts ──────────────────────────────────────────
-
 export const getProfilePosts = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { userId } = req.params as { userId: string };
@@ -85,8 +72,6 @@ export const getProfilePosts = async (req: RequestWithUser, res: Response, next:
     next(err);
   }
 };
-
-// ─── GET /api/profile/:userId/followers ──────────────────────────────────────
 
 export const getFollowers = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -99,8 +84,6 @@ export const getFollowers = async (req: RequestWithUser, res: Response, next: Ne
   }
 };
 
-// ─── GET /api/profile/:userId/following ──────────────────────────────────────
-
 export const getFollowing = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { userId } = req.params as { userId: string };
@@ -111,8 +94,6 @@ export const getFollowing = async (req: RequestWithUser, res: Response, next: Ne
     next(err);
   }
 };
-
-// ─── GET /api/profile/:userId/achievements ────────────────────────────────────
 
 export const getAchievements = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -125,8 +106,6 @@ export const getAchievements = async (req: RequestWithUser, res: Response, next:
   }
 };
 
-// ─── POST /api/profile/:userId/follow ────────────────────────────────────────
-
 export const followUser = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { userId } = req.params as { userId: string };
@@ -136,8 +115,6 @@ export const followUser = async (req: RequestWithUser, res: Response, next: Next
     next(err);
   }
 };
-
-// ─── DELETE /api/profile/:userId/follow ──────────────────────────────────────
 
 export const unfollowUser = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -149,8 +126,6 @@ export const unfollowUser = async (req: RequestWithUser, res: Response, next: Ne
   }
 };
 
-// ─── POST /api/profile/posts/:postId/like ────────────────────────────────────
-
 export const likePost = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { postId } = req.params as { postId: string };
@@ -160,8 +135,6 @@ export const likePost = async (req: RequestWithUser, res: Response, next: NextFu
     next(err);
   }
 };
-
-// ─── DELETE /api/profile/posts/:postId/like ──────────────────────────────────
 
 export const unlikePost = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {

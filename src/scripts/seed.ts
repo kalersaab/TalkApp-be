@@ -1,8 +1,3 @@
-/**
- * Database seed script — creates realistic test data for development.
- * Run with:  npx ts-node -r tsconfig-paths/register src/scripts/seed.ts
- */
-
 import { hash } from 'bcrypt';
 import mongoose from 'mongoose';
 
@@ -15,8 +10,6 @@ import { AchievementModel } from '@models/achievement.model';
 import { InventoryModel } from '@models/inventory.model';
 import { StreakModel } from '@models/streak.model';
 import { logger } from '@utils/logger';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const rand = (min: number, max: number): number => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -31,13 +24,10 @@ const ACHIEVEMENT_TYPES = ['first_message', 'streak_7', 'streak_30', 'medal_coll
 const ITEM_TYPES = ['avatarEffect', 'chatBubble', 'chatBackground'] as string[];
 const POST_TYPES = ['text', 'image', 'voice'] as string[];
 
-// ─── Seed ─────────────────────────────────────────────────────────────────────
-
 async function seed(): Promise<void> {
   await dbConnect();
   logger.info('[Seed] Connected to MongoDB');
 
-  // Wipe existing seed data
   await Promise.all([
     UserModel.deleteMany({}),
     ConversationModel.deleteMany({}),
@@ -50,8 +40,6 @@ async function seed(): Promise<void> {
   logger.info('[Seed] Cleared existing data');
 
   const passwordHash = await hash('Password123!', 10);
-
-  // ─── Users ──────────────────────────────────────────────────────────────────
 
   const userDocs = Array.from({ length: 20 }, (_, i) => {
     const nativeLang = pick(LANGS);
@@ -116,8 +104,6 @@ async function seed(): Promise<void> {
   const users = await UserModel.insertMany(userDocs);
   logger.info(`[Seed] Created ${users.length} users`);
 
-  // ─── Streaks ────────────────────────────────────────────────────────────────
-
   const streakDocs = users.map(u => ({
     userId: u._id,
     currentStreak: u.currentStreak,
@@ -126,8 +112,6 @@ async function seed(): Promise<void> {
   }));
   await StreakModel.insertMany(streakDocs);
   logger.info(`[Seed] Created ${streakDocs.length} streak records`);
-
-  // ─── Follows ────────────────────────────────────────────────────────────────
 
   const followPairs = new Set<string>();
   const followDocs: object[] = [];
@@ -148,8 +132,6 @@ async function seed(): Promise<void> {
   }
   await FollowModel.insertMany(followDocs);
   logger.info(`[Seed] Created ${followDocs.length} follow records`);
-
-  // ─── Conversations ──────────────────────────────────────────────────────────
 
   const convPairs = new Set<string>();
   const convDocs: object[] = [];
@@ -173,8 +155,6 @@ async function seed(): Promise<void> {
   await ConversationModel.insertMany(convDocs);
   logger.info(`[Seed] Created ${convDocs.length} conversations`);
 
-  // ─── Posts ──────────────────────────────────────────────────────────────────
-
   const postDocs = users.flatMap(u =>
     Array.from({ length: rand(1, 5) }, () => ({
       userId: u._id,
@@ -188,8 +168,6 @@ async function seed(): Promise<void> {
   );
   await PostModel.insertMany(postDocs);
   logger.info(`[Seed] Created ${postDocs.length} posts`);
-
-  // ─── Achievements ────────────────────────────────────────────────────────────
 
   const achievementDocs: object[] = [];
   for (const user of users) {
@@ -205,8 +183,6 @@ async function seed(): Promise<void> {
   }
   await AchievementModel.insertMany(achievementDocs);
   logger.info(`[Seed] Created ${achievementDocs.length} achievements`);
-
-  // ─── Inventories ─────────────────────────────────────────────────────────────
 
   const inventoryDocs = users.map(u => {
     const items = Array.from({ length: rand(0, 8) }, (_, j) => ({

@@ -19,8 +19,6 @@ function dtoToFilters(dto: FindPartnersDto): MatchFilters {
   };
 }
 
-// ─── POST /api/matching/find ──────────────────────────────────────────────────
-
 export const findPartners = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const filters = dtoToFilters(req.body as FindPartnersDto);
@@ -31,8 +29,6 @@ export const findPartners = async (req: RequestWithUser, res: Response, next: Ne
   }
 };
 
-// ─── GET /api/matching/suggestions ───────────────────────────────────────────
-
 export const getSuggestions = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const partners = await svc.getSuggestions(req.user._id.toString());
@@ -41,8 +37,6 @@ export const getSuggestions = async (req: RequestWithUser, res: Response, next: 
     next(err);
   }
 };
-
-// ─── POST /api/matching/preferences ──────────────────────────────────────────
 
 export const savePreferences = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {

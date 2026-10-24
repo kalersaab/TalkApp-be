@@ -6,8 +6,6 @@ import type { SaveDeviceTokenDto, UpdateNotificationPreferencesDto } from '@dtos
 
 const svc = new NotificationService();
 
-// ─── POST /api/notifications/token ───────────────────────────────────────────
-
 export const saveToken = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { platform, token } = req.body as SaveDeviceTokenDto;
@@ -17,8 +15,6 @@ export const saveToken = async (req: RequestWithUser, res: Response, next: NextF
     next(err);
   }
 };
-
-// ─── POST /api/notifications/preferences ─────────────────────────────────────
 
 export const updatePreferences = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {

@@ -38,13 +38,10 @@ const groupConversationSchema = new Schema<IGroupConversation>(
   { timestamps: true },
 );
 
-// ─── Indexes ──────────────────────────────────────────────────────────────────
-
-// Find all groups a user is part of
 groupConversationSchema.index({ 'members.userId': 1, updatedAt: -1 });
-// Sort by most recent activity
+
 groupConversationSchema.index({ updatedAt: -1 });
-// Text search on group name
+
 groupConversationSchema.index({ name: 'text', description: 'text' });
 
 export const GroupConversationModel = model<IGroupConversation>('GroupConversation', groupConversationSchema);

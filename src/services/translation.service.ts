@@ -9,13 +9,9 @@ import { isValidLanguageCode } from '@utils/languageCodes';
 import { logger } from '@utils/logger';
 import type { TranslateResult, SupportedLanguage, TranslationLogEntry, TranslationProvider } from '@interfaces/translation.interface';
 
-// ─── Redis key helpers ────────────────────────────────────────────────────────
-
-const TRANSLATION_TTL = 30 * 24 * 3600; // 30 days
-const LANG_LIST_TTL = 24 * 3600; // 24 hours
+const TRANSLATION_TTL = 30 * 24 * 3600;
+const LANG_LIST_TTL = 24 * 3600;
 const LANG_LIST_KEY = 'talkapp:translation:languages';
-
-// ─── DeepL client (lazy singleton) ───────────────────────────────────────────
 
 let _deepl: deepl.Translator | null = null;
 
@@ -27,8 +23,6 @@ function getDeepLClient(): deepl.Translator {
   }
   return _deepl;
 }
-
-// ─── LibreTranslate HTTP helper ───────────────────────────────────────────────
 
 async function callLibreTranslate(text: string, sourceLang: string, targetLang: string): Promise<string> {
   const baseUrl = (LIBRETRANSLATE_URL ?? 'http://localhost:5000').replace(/\/$/, '');
@@ -91,47 +85,35 @@ async function callLibreTranslate(text: string, sourceLang: string, targetLang: 
   });
 }
 
-// ─── TranslationService ───────────────────────────────────────────────────────
-
 export class TranslationService {
-  // ── getCacheKey ───────────────────────────────────────────────────────────────
-
   getCacheKey(text: string, sourceLang: string, targetLang: string): string {
     return createHash('sha256').update(`${text}|${sourceLang.toLowerCase()}|${targetLang.toLowerCase()}`).digest('hex');
   }
-
-  // ── isValidLanguageCode ───────────────────────────────────────────────────────
 
   isValidLanguageCode(code: string): boolean {
     return isValidLanguageCode(code);
   }
 
-  // ── detectLanguage ────────────────────────────────────────────────────────────
-
   async detectLanguage(text: string): Promise<string> {
     try {
       const client = getDeepLClient();
-      // DeepL detect: translate to English with source_lang unset — it returns detected lang
+
       const result = await client.translateText(text, null, 'en-US');
       const detected = Array.isArray(result) ? result[0]?.detectedSourceLang : result.detectedSourceLang;
       return (detected ?? 'en').toLowerCase();
     } catch {
-      return 'en'; // safe fallback
+      return 'en';
     }
   }
-
-  // ── translate ─────────────────────────────────────────────────────────────────
 
   async translate(
     text: string,
     sourceLang: string | null,
     targetLang: string,
   ): Promise<{ translation: string; detectedSourceLang: string; provider: TranslationProvider }> {
-    // ── Try DeepL ──────────────────────────────────────────────────────────────
     try {
       const client = getDeepLClient();
 
-      // DeepL uses regional variants (EN-US, PT-BR) — normalise to uppercase
       const deeplTarget = targetLang.toUpperCase() as deepl.TargetLanguageCode;
       const deeplSource = sourceLang ? (sourceLang.toUpperCase() as deepl.SourceLanguageCode) : null;
 
@@ -157,7 +139,6 @@ export class TranslationService {
     } catch (err) {
       const error = err as Error & { errorCode?: number };
 
-      // 429 — rate limited: wait 1 second and retry once
       if (error.errorCode === 429) {
         logger.warn('[TranslationService] DeepL rate limited — retrying in 1s');
         await new Promise(r => setTimeout(r, 1_000));
@@ -173,7 +154,6 @@ export class TranslationService {
         }
       }
 
-      // 456 — quota exceeded
       if (error.errorCode === 456) {
         logger.error('[TranslationService] DeepL quota exceeded');
         throw new HttpException(503, 'Translation quota exceeded. Please try again tomorrow.');
@@ -182,7 +162,6 @@ export class TranslationService {
       logger.warn(`[TranslationService] DeepL failed, trying LibreTranslate: ${error.message}`);
     }
 
-    // ── Fallback: LibreTranslate ───────────────────────────────────────────────
     try {
       const translation = await callLibreTranslate(text, sourceLang ?? 'auto', targetLang);
       return {
@@ -196,25 +175,20 @@ export class TranslationService {
     }
   }
 
-  // ── translateMessage — full flow with all 10 steps ────────────────────────────
-
   async translateMessage(userId: string, convId: string, msgId: string, targetLang: string): Promise<TranslateResult> {
     const start = Date.now();
     const redis = getRedisService();
     const repo = getMessageRepository();
 
-    // STEP 1 — validate targetLang
     if (!this.isValidLanguageCode(targetLang)) {
       throw new HttpException(400, `Invalid language code: ${targetLang}`);
     }
 
-    // STEP 2 — fetch message from Cassandra
     const message = await repo.getMessageById(convId, msgId);
     if (!message) throw new HttpException(404, 'Message not found');
 
     const content = message.content;
 
-    // STEP 3 — check message.translations map
     const existingTranslation = message.translations[targetLang];
     if (existingTranslation) {
       this.logTranslation({
@@ -230,14 +204,11 @@ export class TranslationService {
       return { translation: existingTranslation, sourceLang: 'unknown', targetLang, fromCache: 'message' };
     }
 
-    // STEP 4 — generate cache key
-    const sourceLangHint = 'auto'; // we don't store source lang on the message
+    const sourceLangHint = 'auto';
     const cacheKey = this.getCacheKey(content, sourceLangHint, targetLang);
 
-    // STEP 5 — check Redis translation cache
     const cached = await redis.getTranslation(cacheKey).catch(() => null);
     if (cached) {
-      // Save to Cassandra so future fetches hit the message cache (step 3)
       void repo
         .updateMessageTranslation({ convId, msgId, lang: targetLang, translation: cached })
         .catch(err => logger.warn(`[TranslationService] Cassandra update failed: ${(err as Error).message}`));
@@ -255,13 +226,10 @@ export class TranslationService {
       return { translation: cached, sourceLang: sourceLangHint, targetLang, fromCache: 'redis' };
     }
 
-    // STEP 6 — detect source language
     const detectedSource = await this.detectLanguage(content);
 
-    // STEPS 7–9 — call DeepL with LibreTranslate fallback
     const { translation, detectedSourceLang, provider } = await this.translate(content, detectedSource, targetLang);
 
-    // STEP 10 — persist to Redis and Cassandra
     const finalCacheKey = this.getCacheKey(content, detectedSourceLang, targetLang);
     void redis
       .cacheTranslation(finalCacheKey, translation, TRANSLATION_TTL)
@@ -285,12 +253,9 @@ export class TranslationService {
     return { translation, sourceLang: detectedSourceLang, targetLang, fromCache: false, provider };
   }
 
-  // ── getSupportedLanguages ─────────────────────────────────────────────────────
-
   async getSupportedLanguages(): Promise<SupportedLanguage[]> {
     const redis = getRedisService();
 
-    // Check Redis cache (24h TTL)
     const cached = await redis.getTranslation(LANG_LIST_KEY).catch(() => null);
     if (cached) {
       return JSON.parse(cached) as SupportedLanguage[];
@@ -308,7 +273,6 @@ export class TranslationService {
 
       return result;
     } catch {
-      // Return a minimal static list if DeepL is unavailable
       return [
         { code: 'en', name: 'English' },
         { code: 'es', name: 'Spanish' },
@@ -323,8 +287,6 @@ export class TranslationService {
       ];
     }
   }
-
-  // ── Cost-optimisation logging ─────────────────────────────────────────────────
 
   private logTranslation(entry: TranslationLogEntry): void {
     logger.info(

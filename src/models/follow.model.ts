@@ -12,11 +12,8 @@ const followSchema = new Schema<IFollow>(
   },
 );
 
-// ─── Indexes ──────────────────────────────────────────────────────────────────
-
-// Compound unique — one follow record per pair
 followSchema.index({ followerId: 1, followingId: 1 }, { unique: true });
-// Reverse lookup — "who follows this user?"
+
 followSchema.index({ followingId: 1 });
 
 export const FollowModel = model<IFollow>('Follow', followSchema);

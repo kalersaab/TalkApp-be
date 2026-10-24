@@ -1,13 +1,9 @@
 import type { ContentType, MessageStatus } from './message.interface';
 
-// ─── Socket data attached per connection ──────────────────────────────────────
-
 export interface SocketData {
   userId: string;
   email: string;
 }
-
-// ─── Client → Server events ───────────────────────────────────────────────────
 
 export interface ClientToServerEvents {
   send_message: (payload: SendMessagePayload) => void;
@@ -18,8 +14,6 @@ export interface ClientToServerEvents {
   join_group: (payload: JoinGroupPayload) => void;
   leave_group: (payload: LeaveGroupPayload) => void;
 }
-
-// ─── Server → Client events ───────────────────────────────────────────────────
 
 export interface ServerToClientEvents {
   connected: (payload: ConnectedPayload) => void;
@@ -38,20 +32,16 @@ export interface ServerToClientEvents {
   group_updated: (payload: GroupUpdatedPayload) => void;
 }
 
-// ─── Inter-server events (Redis adapter) ─────────────────────────────────────
-
 export interface InterServerEvents {
   ping: () => void;
 }
-
-// ─── Payload shapes ───────────────────────────────────────────────────────────
 
 export interface SendMessagePayload {
   convId: string;
   content: string;
   contentType?: ContentType;
   mediaUrl?: string;
-  clientMsgId: string; // client-generated idempotency key
+  clientMsgId: string;
 }
 
 export interface TypingPayload {
@@ -70,7 +60,7 @@ export interface ConnectedPayload {
 
 export interface MessageAckPayload {
   clientMsgId: string;
-  msgId: string; // server-assigned TIMEUUID
+  msgId: string;
   status: MessageStatus;
 }
 
@@ -88,7 +78,7 @@ export interface NewMessagePayload {
   mediaUrl: string | null;
   status: MessageStatus;
   createdAt: string;
-  /** Sender's equipped cosmetic items — client uses these to render the correct bubble/background */
+
   senderEquipped: {
     chatBubble: string | null;
     chatBackground: string | null;
@@ -123,8 +113,6 @@ export interface RankChangedPayload {
   oldRank: string;
   newRank: string;
 }
-
-// ─── Group Chat Payloads ──────────────────────────────────────────────────────
 
 export interface JoinGroupPayload {
   groupId: string;

@@ -5,8 +5,6 @@ import { JWT_PRIVATE_KEY, JWT_ACCESS_EXPIRY, JWT_REFRESH_EXPIRY } from '@config'
 import type { AccessTokenPayload } from '@interfaces/auth.interface';
 import { HttpException } from '@exceptions/HttpException';
 
-// ─── Access token ─────────────────────────────────────────────────────────────
-
 export function signAccessToken(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): string {
   return jwt.sign(payload, JWT_PRIVATE_KEY, {
     algorithm: 'HS256',
@@ -23,9 +21,6 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
   }
 }
 
-// ─── Refresh token ────────────────────────────────────────────────────────────
-
-/** Generates a cryptographically random opaque refresh token string */
 export function generateRefreshToken(): string {
   return randomBytes(64).toString('hex');
 }
@@ -34,12 +29,10 @@ export function hashToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
-/** Generates a random family ID for refresh token rotation chains */
 export function generateFamily(): string {
   return randomBytes(16).toString('hex');
 }
 
-/** Returns the Date when a refresh token expires */
 export function refreshTokenExpiry(): Date {
   const expiry = JWT_REFRESH_EXPIRY ?? '30d';
   const days = parseInt(expiry.replace('d', ''), 10) || 30;

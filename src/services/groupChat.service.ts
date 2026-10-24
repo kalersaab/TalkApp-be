@@ -21,12 +21,8 @@ import type {
 import type { IUser } from '@interfaces/users.interface';
 import { logger } from '@utils/logger';
 
-// ─── Cache Keys ───────────────────────────────────────────────────────────────
-
-const GROUP_LIST_TTL = 60; // seconds
+const GROUP_LIST_TTL = 60;
 const groupListKey = (userId: string) => `chat:grouplist:${userId}`;
-
-// ─── Helper Functions ─────────────────────────────────────────────────────────
 
 function toGroupMemberDto(member: IGroupMember, user: IUser): GroupMemberDto {
   return {
@@ -60,15 +56,10 @@ function toGroupConversationDto(group: IGroupConversation, members: GroupMemberD
   };
 }
 
-// ─── GroupChatService ─────────────────────────────────────────────────────────
-
 export class GroupChatService {
-  // ── Create Group ──────────────────────────────────────────────────────────────
-
   async createGroup(input: CreateGroupInput): Promise<GroupConversationDto> {
     const { creatorId, name, description, avatarUrl, memberIds, settings } = input;
 
-    // Validate all member IDs exist
     const allMemberIds = [creatorId, ...memberIds];
     const uniqueMemberIds = [...new Set(allMemberIds)];
 
@@ -90,7 +81,6 @@ export class GroupChatService {
       throw new HttpException(404, 'One or more user IDs are invalid');
     }
 
-    // Create group with creator as admin
     const members: IGroupMember[] = uniqueMemberIds.map(id => ({
       userId: new Types.ObjectId(id),
       role: id === creatorId ? 'admin' : 'member',
@@ -110,11 +100,9 @@ export class GroupChatService {
       },
     });
 
-    // Invalidate cache for all members
     const redis = getRedisService();
     await Promise.all(uniqueMemberIds.map(id => redis.invalidateProfile(groupListKey(id)).catch(() => null)));
 
-    // Map members to DTOs
     const memberDtos = group.members.map(member => {
       const user = users.find(u => u._id.toString() === member.userId.toString())!;
       return toGroupMemberDto(member, user);
@@ -125,21 +113,16 @@ export class GroupChatService {
     return toGroupConversationDto(group.toObject(), memberDtos);
   }
 
-  // ── Get Groups ────────────────────────────────────────────────────────────────
-
   async getGroups(input: GetGroupsInput): Promise<PagedGroups> {
     const { userId, limit = 20, lastGroupId } = input;
     const redis = getRedisService();
 
-    // Cache only the first page
     const cacheKey = groupListKey(userId);
     if (!lastGroupId) {
       try {
         const cached = await redis.getProfile(cacheKey);
         if (cached) return cached as unknown as PagedGroups;
-      } catch {
-        // Cache miss — continue to DB
-      }
+      } catch {}
     }
 
     const query: Record<string, unknown> = {
@@ -152,7 +135,6 @@ export class GroupChatService {
 
     const groups = await GroupConversationModel.find(query).sort({ updatedAt: -1 }).limit(limit).lean<IGroupConversation[]>();
 
-    // Collect all unique member IDs
     const allMemberIds = groups.flatMap(g => g.members.map(m => m.userId.toString()));
     const uniqueMemberIds = [...new Set(allMemberIds)];
 
@@ -177,15 +159,12 @@ export class GroupChatService {
       nextCursor: groups.length === limit ? groups[groups.length - 1]._id.toString() : null,
     };
 
-    // Cache first page only
     if (!lastGroupId) {
       await redis.cacheProfile(cacheKey, result as unknown as Record<string, unknown>, GROUP_LIST_TTL).catch(() => null);
     }
 
     return result;
   }
-
-  // ── Get Single Group ──────────────────────────────────────────────────────────
 
   async getGroupById(groupId: string, requesterId: string): Promise<GroupConversationDto> {
     const group = await GroupConversationModel.findById(groupId).lean<IGroupConversation>();
@@ -194,13 +173,11 @@ export class GroupChatService {
       throw new HttpException(404, 'Group not found');
     }
 
-    // Check if requester is a member
     const isMember = group.members.some(m => m.userId.toString() === requesterId);
     if (!isMember) {
       throw new HttpException(403, 'You are not a member of this group');
     }
 
-    // Fetch member details
     const memberIds = group.members.map(m => m.userId);
     const users = await UserModel.find({ _id: { $in: memberIds } })
       .select('displayName avatarUrl isOnline')
@@ -216,8 +193,6 @@ export class GroupChatService {
     return toGroupConversationDto(group, memberDtos);
   }
 
-  // ── Add Members ───────────────────────────────────────────────────────────────
-
   async addMembers(input: AddMembersInput): Promise<GroupConversationDto> {
     const { groupId, requesterId, memberIds } = input;
 
@@ -226,7 +201,6 @@ export class GroupChatService {
       throw new HttpException(404, 'Group not found');
     }
 
-    // Check if requester is an admin
     const requesterMember = group.members.find(m => m.userId.toString() === requesterId);
     if (!requesterMember) {
       throw new HttpException(403, 'You are not a member of this group');
@@ -236,10 +210,7 @@ export class GroupChatService {
       throw new HttpException(403, 'Only admins can add members');
     }
 
-    // Validate new member IDs
-    const uniqueNewIds = [...new Set(memberIds)].filter(
-      id => !group.members.some(m => m.userId.toString() === id)
-    );
+    const uniqueNewIds = [...new Set(memberIds)].filter(id => !group.members.some(m => m.userId.toString() === id));
 
     if (uniqueNewIds.length === 0) {
       throw new HttpException(400, 'All specified users are already members');
@@ -259,7 +230,6 @@ export class GroupChatService {
       throw new HttpException(404, 'One or more user IDs are invalid');
     }
 
-    // Add new members
     const newMembers: IGroupMember[] = uniqueNewIds.map(id => ({
       userId: new Types.ObjectId(id),
       role: 'member',
@@ -269,12 +239,10 @@ export class GroupChatService {
     group.members.push(...newMembers);
     await group.save();
 
-    // Invalidate cache for all affected users
     const redis = getRedisService();
     const allAffected = [...group.members.map(m => m.userId.toString()), ...uniqueNewIds];
     await Promise.all(allAffected.map(id => redis.invalidateProfile(groupListKey(id)).catch(() => null)));
 
-    // Broadcast member joined events via WebSocket
     try {
       const gateway = getChatGateway();
       for (const user of users) {
@@ -286,7 +254,6 @@ export class GroupChatService {
 
     logger.info(`[GroupChat] Added ${uniqueNewIds.length} members to group ${groupId}`);
 
-    // Fetch all members for response
     const allUsers = await UserModel.find({
       _id: { $in: group.members.map(m => m.userId) },
     })
@@ -301,8 +268,6 @@ export class GroupChatService {
 
     return toGroupConversationDto(group.toObject(), memberDtos);
   }
-
-  // ── Remove Member ─────────────────────────────────────────────────────────────
 
   async removeMember(input: RemoveMemberInput): Promise<GroupConversationDto> {
     const { groupId, requesterId, targetUserId } = input;
@@ -322,17 +287,14 @@ export class GroupChatService {
       throw new HttpException(404, 'Target user is not a member of this group');
     }
 
-    // Only admins can remove others; members can only remove themselves
     if (requesterId !== targetUserId && requesterMember.role !== 'admin') {
       throw new HttpException(403, 'Only admins can remove other members');
     }
 
-    // Cannot remove the creator
     if (targetUserId === group.createdBy.toString()) {
       throw new HttpException(400, 'Cannot remove the group creator');
     }
 
-    // Remove member
     group.members = group.members.filter(m => m.userId.toString() !== targetUserId);
 
     if (group.members.length < 2) {
@@ -341,15 +303,11 @@ export class GroupChatService {
 
     await group.save();
 
-    // Invalidate cache
     const redis = getRedisService();
     await Promise.all(
-      [...group.members.map(m => m.userId.toString()), targetUserId].map(id =>
-        redis.invalidateProfile(groupListKey(id)).catch(() => null),
-      ),
+      [...group.members.map(m => m.userId.toString()), targetUserId].map(id => redis.invalidateProfile(groupListKey(id)).catch(() => null)),
     );
 
-    // Broadcast member left event via WebSocket
     try {
       const targetUser = await UserModel.findById(targetUserId).select('displayName avatarUrl').lean();
       if (targetUser) {
@@ -362,7 +320,6 @@ export class GroupChatService {
 
     logger.info(`[GroupChat] Removed member ${targetUserId} from group ${groupId}`);
 
-    // Fetch remaining members
     const users = await UserModel.find({
       _id: { $in: group.members.map(m => m.userId) },
     })
@@ -378,8 +335,6 @@ export class GroupChatService {
     return toGroupConversationDto(group.toObject(), memberDtos);
   }
 
-  // ── Leave Group ───────────────────────────────────────────────────────────────
-
   async leaveGroup(input: LeaveGroupInput): Promise<void> {
     const { groupId, userId } = input;
 
@@ -391,8 +346,6 @@ export class GroupChatService {
 
     logger.info(`[GroupChat] User ${userId} left group ${groupId}`);
   }
-
-  // ── Update Group ──────────────────────────────────────────────────────────────
 
   async updateGroup(input: UpdateGroupInput): Promise<GroupConversationDto> {
     const { groupId, requesterId, name, description, avatarUrl, settings } = input;
@@ -411,7 +364,6 @@ export class GroupChatService {
       throw new HttpException(403, 'Only admins can update group settings');
     }
 
-    // Update fields
     if (name !== undefined) group.name = name;
     if (description !== undefined) group.description = description;
     if (avatarUrl !== undefined) group.avatarUrl = avatarUrl;
@@ -423,11 +375,9 @@ export class GroupChatService {
 
     await group.save();
 
-    // Invalidate cache
     const redis = getRedisService();
     await Promise.all(group.members.map(m => redis.invalidateProfile(groupListKey(m.userId.toString())).catch(() => null)));
 
-    // Broadcast group updated event via WebSocket
     try {
       const gateway = getChatGateway();
       const updates: Record<string, unknown> = {};
@@ -435,7 +385,7 @@ export class GroupChatService {
       if (description !== undefined) updates.description = description;
       if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
       if (settings) updates.settings = settings;
-      
+
       gateway.broadcastGroupUpdated(groupId, requesterId, updates);
     } catch (err) {
       logger.warn(`[GroupChat] Failed to broadcast group updated: ${(err as Error).message}`);
@@ -443,7 +393,6 @@ export class GroupChatService {
 
     logger.info(`[GroupChat] Updated group ${groupId}`);
 
-    // Fetch members
     const users = await UserModel.find({
       _id: { $in: group.members.map(m => m.userId) },
     })
@@ -458,8 +407,6 @@ export class GroupChatService {
 
     return toGroupConversationDto(group.toObject(), memberDtos);
   }
-
-  // ── Check Authorization ───────────────────────────────────────────────────────
 
   async checkMembership(groupId: string, userId: string): Promise<boolean> {
     const group = await GroupConversationModel.findById(groupId).select('members').lean();

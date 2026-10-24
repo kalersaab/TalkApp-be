@@ -1,7 +1,5 @@
 import type { MedalTier, PostType, CollectorRank } from './users.interface';
 
-// ─── Full profile DTO returned to clients ─────────────────────────────────────
-
 export interface ProfileDTO {
   _id: string;
   displayName: string;
@@ -13,15 +11,15 @@ export interface ProfileDTO {
   gender: string | null;
   joinedAt: Date;
   daysJoined: number;
-  // Activity
+
   currentStreak: number;
   longestStreak: number;
   lastActiveDate: Date | null;
-  // Social
+
   followersCount: number;
   followingCount: number;
-  isFollowing: boolean; // is the requesting user following this profile?
-  // Gamification
+  isFollowing: boolean;
+
   totalMedalCount: number;
   collectorRank: CollectorRank;
   equippedItems: {
@@ -30,9 +28,9 @@ export interface ProfileDTO {
     chatBackground: string | null;
   };
   recentAchievements: AchievementDTO[];
-  // Inventory summary
+
   inventory: InventorySummaryDTO | null;
-  // Presence
+
   isOnline: boolean;
   lastSeen: Date | null;
 }
@@ -54,8 +52,6 @@ export interface InventorySummaryDTO {
   };
 }
 
-// ─── Post DTO ─────────────────────────────────────────────────────────────────
-
 export interface PostDTO {
   _id: string;
   userId: string;
@@ -73,8 +69,6 @@ export interface PagedPosts {
   nextCursor: string | null;
 }
 
-// ─── Basic user DTO (for follower/following lists) ────────────────────────────
-
 export interface BasicUserDTO {
   _id: string;
   displayName: string;
@@ -88,8 +82,6 @@ export interface PagedUsers {
   users: BasicUserDTO[];
   nextCursor: string | null;
 }
-
-// ─── Follow result ────────────────────────────────────────────────────────────
 
 export interface FollowResult {
   following: boolean;

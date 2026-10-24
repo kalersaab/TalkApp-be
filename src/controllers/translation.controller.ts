@@ -6,8 +6,6 @@ import type { TranslateMessageDto } from '@dtos/translation.dto';
 
 const svc = new TranslationService();
 
-// ─── POST /api/translation/translate ─────────────────────────────────────────
-
 export const translateMessage = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { convId, msgId, targetLang } = req.body as TranslateMessageDto;
@@ -17,8 +15,6 @@ export const translateMessage = async (req: RequestWithUser, res: Response, next
     next(err);
   }
 };
-
-// ─── GET /api/translation/languages ──────────────────────────────────────────
 
 export const getSupportedLanguages = async (_req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {

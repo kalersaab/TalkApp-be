@@ -110,16 +110,13 @@ export class UserService {
       logger.error(`[Users] Background onboarding tasks failed for ${lowerEmail}: ${err}`),
     );
 
-    // 5. Respond to Postman instantly!
     return user;
   }
 
   private async handleOnboardingSideEffects(lowerEmail: string, displayName: string): Promise<void> {
     try {
-      // 1. Generate and store OTP inside Redis (Happens while user app transitions screens)
       const otp = await this.otpService.generateAndStoreOTP(lowerEmail);
 
-      // 2. Transmit through your SMTP network gateway
       await sendEmail(
         [lowerEmail],
         `Verify Your Email for TalkApp - Your OTP Code`,
@@ -146,17 +143,13 @@ export class UserService {
     const { email, otp } = userData;
     const lowerEmail = email.toLowerCase();
 
-    // Verify OTP using secure OTP service
     const isValid = await this.otpService.verifyOTP(lowerEmail, otp);
 
     if (!isValid) {
       throw new HttpException(400, 'Invalid or expired OTP');
     }
 
-    const user = await UserModel.updateOne(
-      { email: lowerEmail, isVerified: false }, // skip already-verified users
-      { $set: { isVerified: true, isActive: true } },
-    );
+    const user = await UserModel.updateOne({ email: lowerEmail, isVerified: false }, { $set: { isVerified: true, isActive: true } });
 
     if (!user) {
       throw new HttpException(404, 'User not found');
@@ -170,17 +163,13 @@ export class UserService {
     const lowerEmail = email.toLowerCase();
 
     const [user, otp] = await Promise.all([
-      UserModel.findOne(
-        { email: lowerEmail },
-        { isVerified: 1, displayName: 1 }, // lean projection
-      ).lean(),
+      UserModel.findOne({ email: lowerEmail }, { isVerified: 1, displayName: 1 }).lean(),
       this.otpService.generateAndStoreOTP(lowerEmail),
     ]);
 
     if (!user) throw new HttpException(404, 'User not found');
     if (user.isVerified) throw new HttpException(400, 'Email already verified');
 
-    // Email is fully off the critical path
     setImmediate(async () => {
       try {
         await sendEmail(
@@ -201,7 +190,6 @@ export class UserService {
         logger.info(`[Users] OTP resent to ${lowerEmail}`);
       } catch (err) {
         logger.error(`[Users] Failed to resend OTP to ${lowerEmail}: ${err}`);
-        // TODO: push to BullMQ retry queue here
       }
     });
 
@@ -226,10 +214,9 @@ export class UserService {
 
     if (Object.keys(updatePayload).length === 0) return null;
 
-    // 4. LATENCY FIX: Execute the update with lean() to bypass heavy Mongoose overhead
     const updatedUser = await UserModel.findByIdAndUpdate(
       userId,
-      { $set: updatePayload }, // Using $set guarantees only the specified properties change
+      { $set: updatePayload },
       {
         new: true,
         runValidators: false,

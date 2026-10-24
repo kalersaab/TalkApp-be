@@ -14,8 +14,6 @@ export interface SupportedLanguage {
   name: string;
 }
 
-// ─── Cost-optimisation log entry ──────────────────────────────────────────────
-
 export interface TranslationLogEntry {
   userId: string;
   sourceLang: string;

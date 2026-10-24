@@ -4,18 +4,11 @@ type State = 'closed' | 'open' | 'half-open';
 
 interface CircuitBreakerOptions {
   name: string;
-  failureThreshold: number; // failures before opening
-  successThreshold: number; // successes in half-open before closing
-  timeout: number; // ms to wait before trying half-open
+  failureThreshold: number;
+  successThreshold: number;
+  timeout: number;
 }
 
-/**
- * Simple circuit breaker.
- *
- * closed   → normal operation; failures increment counter
- * open     → fast-fail all calls; resets after `timeout` ms
- * half-open → allows one probe call; success closes, failure re-opens
- */
 export class CircuitBreaker {
   private state: State = 'closed';
   private failures = 0;

@@ -9,7 +9,6 @@ const userSchema = new Schema<IUser>(
     passwordHash: { type: String, required: false, select: false, sparse: true },
     avatarUrl: { type: String },
 
-    // Auth
     provider: { type: String, enum: ['local', 'google', 'facebook', 'phone'], required: true, default: 'local' },
     googleId: { type: String, unique: true, sparse: true },
     appleId: { type: String, unique: true, sparse: true },
@@ -18,7 +17,6 @@ const userSchema = new Schema<IUser>(
     isVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: false },
 
-    // Language learning
     nativeLang: { type: String, required: true, default: 'en' },
     learningLangs: {
       type: [String],
@@ -28,14 +26,13 @@ const userSchema = new Schema<IUser>(
         message: 'A user can learn at most 5 languages',
       },
     },
-    // Map<langCode, level>
+
     proficiencyLevels: {
       type: Map,
       of: { type: String, enum: ['beginner', 'intermediate', 'advanced'] },
       default: {},
     },
 
-    // Profile
     gender: { type: String, enum: ['male', 'female', 'other'], sparse: true },
     dateOfBirth: { type: Date, sparse: true },
     location: {
@@ -44,22 +41,19 @@ const userSchema = new Schema<IUser>(
         enum: ['Point'],
         default: 'Point',
       },
-      coordinates: { type: [Number], default: undefined, sparse: true }, // [lng, lat]
+      coordinates: { type: [Number], default: undefined, sparse: true },
     },
     bio: { type: String, maxlength: 300 },
 
-    // Activity
     daysJoined: { type: Number, default: 0 },
     joinedAt: { type: Date, default: Date.now },
     currentStreak: { type: Number, default: 0 },
     longestStreak: { type: Number, default: 0 },
     lastActiveDate: { type: Date },
 
-    // Social counts (denormalised for fast reads)
     followingCount: { type: Number, default: 0 },
     followersCount: { type: Number, default: 0 },
 
-    // Gamification
     totalMedalCount: { type: Number, default: 0 },
     collectorRank: {
       type: String,
@@ -72,11 +66,9 @@ const userSchema = new Schema<IUser>(
       chatBackground: { type: String },
     },
 
-    // Presence
     isOnline: { type: Boolean, default: false },
     lastSeen: { type: Date, default: null },
 
-    // Brute-force protection
     failedLoginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date },
   },
@@ -85,18 +77,16 @@ const userSchema = new Schema<IUser>(
   },
 );
 
-// ─── Indexes ──────────────────────────────────────────────────────────────────
-
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ username: 1 }, { unique: true, sparse: true });
-userSchema.index({ location: '2dsphere' }, { sparse: true }); // geo queries
+userSchema.index({ location: '2dsphere' }, { sparse: true });
 userSchema.index({ nativeLang: 1 });
 userSchema.index({ learningLangs: 1 });
 userSchema.index({ isOnline: 1 });
 userSchema.index({ collectorRank: 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ isActive: 1 });
-userSchema.index({ 'proficiencyLevels': 1 }, { sparse: true }); // Index for language proficiency queries
+userSchema.index({ proficiencyLevels: 1 }, { sparse: true });
 
 export const UserModel = model<IUser>('User', userSchema);
 export default UserModel;

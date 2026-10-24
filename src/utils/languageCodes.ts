@@ -1,7 +1,3 @@
-/**
- * ISO 639-1 two-letter language codes.
- * Used for validation in matching filters and user profiles.
- */
 export const ISO_639_1 = new Set([
   'aa',
   'ab',

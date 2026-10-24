@@ -4,14 +4,6 @@ import AWS from 'aws-sdk';
 import { SendEmailRequest } from 'aws-sdk/clients/ses';
 import nodemailer from 'nodemailer';
 
-/**
- * Sends email using AWS SES for production and Nodemailer for development.
- * @param {Array} recipients - List of recipient email addresses.
- * @param {String} subject - Email subject.
- * @param {String} template - Email body (HTML).
- * @param {Array} ccRecipients - List of CC email addresses.
- * @param {Array} bccRecipients - List of BCC email addresses (optional).
- */
 const sendEmail = (recipients: string[], subject: string, template: string, ccRecipients: string[], bccRecipients?: string[]) => {
   let destinationEmail = [];
   let ccDestinationEmail = [];
@@ -19,12 +11,10 @@ const sendEmail = (recipients: string[], subject: string, template: string, ccRe
   let subjectDestination = subject;
 
   if (NODE_ENV === 'production') {
-    // Use AWS SES in production
     destinationEmail = recipients;
     ccDestinationEmail = ccRecipients;
     bccDestinationEmail = bccRecipients;
   } else if (!REDIRECT_EMAIL && NODE_ENV !== 'production') {
-    // Use Nodemailer in development
     throw new Error('REDIRECT_EMAIL is not defined for ' + NODE_ENV + ' environment.');
   } else {
     destinationEmail = [REDIRECT_EMAIL];
@@ -40,7 +30,6 @@ const sendEmail = (recipients: string[], subject: string, template: string, ccRe
   return new Promise((resolve, reject) => {
     try {
       if (NODE_ENV === 'production') {
-        // AWS SES Configuration
         const SES_CONFIG = {
           accessKeyId: AWS_SES_ACCESS_KEY_ID,
           secretAccessKey: AWS_SES_SECRET_ACCESS_KEY,
@@ -85,10 +74,10 @@ const sendEmail = (recipients: string[], subject: string, template: string, ccRe
         });
 
         const mailOptions = {
-          from: DEV_EMAIL, // Sender address
-          to: destinationEmail.join(', '), // Recipient(s)
-          cc: ccDestinationEmail.join(', '), // CC
-          bcc: bccDestinationEmail.join(', '), // BCC
+          from: DEV_EMAIL,
+          to: destinationEmail.join(', '),
+          cc: ccDestinationEmail.join(', '),
+          bcc: bccDestinationEmail.join(', '),
           subject: subjectDestination,
           html: template,
         };

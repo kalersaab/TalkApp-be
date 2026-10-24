@@ -1,8 +1,6 @@
 import type { Request } from 'express';
 import type { IUser } from '@interfaces/users.interface';
 
-// ─── JWT payload ──────────────────────────────────────────────────────────────
-
 export interface AccessTokenPayload {
   userId: string;
   email: string;
@@ -10,20 +8,14 @@ export interface AccessTokenPayload {
   exp?: number;
 }
 
-// ─── Token pair returned to clients ──────────────────────────────────────────
-
 export interface AuthTokenPair {
   accessToken: string;
   refreshToken: string;
 }
 
-// ─── Express request augmentation ────────────────────────────────────────────
-
 export interface RequestWithUser extends Request {
   user?: Record<string, any>;
 }
-
-// ─── Legacy — kept so existing code compiles without changes ─────────────────
 
 export interface DataStoredInToken {
   _id: string;
@@ -34,8 +26,6 @@ export interface TokenData {
   expiresIn: number;
 }
 
-// ─── OAuth payloads ───────────────────────────────────────────────────────────
-
 export interface GoogleTokenPayload {
   sub: string;
   email: string;
@@ -45,12 +35,10 @@ export interface GoogleTokenPayload {
 }
 
 export interface AppleTokenPayload {
-  sub: string; // Apple user ID — stable across sessions
-  email?: string; // only present on first sign-in
+  sub: string;
+  email?: string;
   email_verified?: boolean;
 }
-
-// ─── Auth service return types ────────────────────────────────────────────────
 
 export interface AuthResult {
   accessToken: string;

@@ -32,7 +32,6 @@ class App {
     this.env = NODE_ENV || 'development';
     this.port = PORT || 8000;
 
-    // Single HTTP server shared by Express + Socket.io
     this.server = http.createServer(this.app);
 
     this.connectToDatabase();
@@ -76,23 +75,19 @@ class App {
     await cassandraConnect();
     await redisConnect();
 
-    // Initialise Socket.io gateway after all data stores are ready
     initChatGateway(this.server);
     logger.info('[App] ChatGateway initialised');
 
-    // 🚀 PERFORMANCE: Pre-warm OAuth certificate caches
     await this.bootstrapAuthProviders();
   }
 
   private async bootstrapAuthProviders(): Promise<void> {
     try {
-      // Dynamically import to avoid circular dependencies
       const { bootstrapAuthProviders } = await import('@services/auth.service');
       await bootstrapAuthProviders();
       logger.info('[App] OAuth providers bootstrapped successfully');
     } catch (err) {
       logger.warn(`[App] OAuth bootstrap failed: ${(err as Error).message}`);
-      // Non-fatal error - OAuth will work normally, just with slightly higher first-call latency
     }
   }
 
@@ -108,13 +103,12 @@ class App {
   }
 
   private initializeRoutes(routes: Routes[]): void {
-    routes.forEach(route => {
-      this.app.use('/api/', route.router);
-    });
-
-    // Health endpoint
     this.app.get('/api/health', (_req, res) => {
       res.json({ status: 'ok', uptime: process.uptime() });
+    });
+
+    routes.forEach(route => {
+      this.app.use('/api/', route.router);
     });
   }
 

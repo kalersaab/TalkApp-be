@@ -2,7 +2,7 @@ import request from 'supertest';
 import App from '@/app';
 import IndexRoute from '@routes/index.route';
 
-jest.setTimeout(10000); // Increased timeout for the test
+jest.setTimeout(10000);
 
 describe('Testing Index', () => {
   let app: App;

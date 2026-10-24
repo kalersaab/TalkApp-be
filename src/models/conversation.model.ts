@@ -3,7 +3,6 @@ import type { IConversation } from '@interfaces/users.interface';
 
 const conversationSchema = new Schema<IConversation>(
   {
-    // Always exactly 2 participants for a DM
     participantIds: {
       type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
       required: true,
@@ -22,13 +21,10 @@ const conversationSchema = new Schema<IConversation>(
   { timestamps: true },
 );
 
-// ─── Indexes ──────────────────────────────────────────────────────────────────
-
-// Compound index — the primary lookup: "find conversation between user A and user B"
 conversationSchema.index({ participantIds: 1 });
-// Unique pair — prevents duplicate conversations between the same two users
+
 conversationSchema.index({ 'participantIds.0': 1, 'participantIds.1': 1 }, { unique: true, sparse: true });
-conversationSchema.index({ updatedAt: -1 }); // sort by most recent activity
+conversationSchema.index({ updatedAt: -1 });
 
 export const ConversationModel = model<IConversation>('Conversation', conversationSchema);
 export default ConversationModel;

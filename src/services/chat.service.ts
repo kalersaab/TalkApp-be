@@ -19,12 +19,8 @@ import type { MessageDto, PagedMessages, MessageStatus } from '@interfaces/messa
 import type { IConversation, IUser } from '@interfaces/users.interface';
 import { logger } from '@utils/logger';
 
-// ─── Cache TTL ────────────────────────────────────────────────────────────────
-
-const CONV_LIST_TTL = 60; // seconds
+const CONV_LIST_TTL = 60;
 const convListKey = (userId: string) => `chat:convlist:${userId}`;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toParticipantProfile(user: IUser): ParticipantProfile {
   return {
@@ -54,40 +50,31 @@ function toConversationDto(conv: IConversation, otherUser: IUser): ConversationD
   };
 }
 
-// ─── ChatService ──────────────────────────────────────────────────────────────
-
 export class ChatService {
   private readonly repo = getMessageRepository();
-
-  // ── getConversations ─────────────────────────────────────────────────────────
 
   async getConversations(input: GetConversationsInput): Promise<PagedConversations> {
     const { userId, limit = 20, lastConvId } = input;
     const redis = getRedisService();
 
-    // Cache only the first page (no cursor) — subsequent pages skip cache
     const cacheKey = convListKey(userId);
     if (!lastConvId) {
       try {
         const cached = await redis.getProfile(cacheKey);
         if (cached) return cached as unknown as PagedConversations;
-      } catch {
-        // Cache miss is fine — continue to DB
-      }
+      } catch {}
     }
 
     const query: Record<string, unknown> = {
       participantIds: new Types.ObjectId(userId),
     };
 
-    // Cursor: only return conversations older than lastConvId
     if (lastConvId) {
       query['_id'] = { $lt: new Types.ObjectId(lastConvId) };
     }
 
     const conversations = await ConversationModel.find(query).sort({ updatedAt: -1 }).limit(limit).lean<IConversation[]>();
 
-    // Collect all "other" participant IDs in one batch query
     const otherIds = conversations.map(c => {
       const ids = c.participantIds.map(id => id.toString());
       return ids.find(id => id !== userId) ?? ids[0];
@@ -114,15 +101,12 @@ export class ChatService {
 
     const result: PagedConversations = { conversations: dtos, nextCursor };
 
-    // Cache first page
     if (!lastConvId) {
       await redis.cacheProfile(cacheKey, result as unknown as Record<string, unknown>, CONV_LIST_TTL).catch(() => null);
     }
 
     return result;
   }
-
-  // ── createConversation ───────────────────────────────────────────────────────
 
   async createConversation(input: CreateConversationInput): Promise<ConversationDto> {
     const { requesterId, targetUserId } = input;
@@ -133,17 +117,14 @@ export class ChatService {
 
     if (!targetUser) throw new ConversationNotFoundError(targetUserId);
 
-    // Sort IDs so the unique index always matches regardless of who initiates
     const sorted = [requesterId, targetUserId].map(id => new Types.ObjectId(id)).sort((a, b) => a.toString().localeCompare(b.toString()));
 
-    // Upsert — returns existing if already present
     const conv = (await ConversationModel.findOneAndUpdate(
       { participantIds: { $all: sorted, $size: 2 } },
       { $setOnInsert: { participantIds: sorted, isMutualFriends: false } },
       { upsert: true, new: true, lean: true },
     )) as IConversation;
 
-    // Bust conversation list cache for both participants
     const redis = getRedisService();
     await Promise.all([
       redis.invalidateProfile(convListKey(requesterId)).catch(() => null),
@@ -153,8 +134,6 @@ export class ChatService {
     return toConversationDto(conv, targetUser);
   }
 
-  // ── softDeleteConversation ───────────────────────────────────────────────────
-
   async softDeleteConversation(convId: string, userId: string): Promise<void> {
     const conv = await ConversationModel.findById(convId).lean<IConversation>();
     if (!conv) throw new ConversationNotFoundError(convId);
@@ -162,8 +141,6 @@ export class ChatService {
     const isParticipant = conv.participantIds.some(id => id.toString() === userId);
     if (!isParticipant) throw new UnauthorizedConversationError(userId, convId);
 
-    // Soft delete: remove this user from participantIds.
-    // When only one participant remains the other still sees the conversation.
     await ConversationModel.updateOne({ _id: new Types.ObjectId(convId) }, { $pull: { participantIds: new Types.ObjectId(userId) } });
 
     await getRedisService()
@@ -171,20 +148,15 @@ export class ChatService {
       .catch(() => null);
   }
 
-  // ── getMessages ──────────────────────────────────────────────────────────────
-
   async getMessages(input: GetMessagesInput): Promise<PagedMessages> {
     const { convId, requesterId, limit = 50, beforeMsgId } = input;
 
-    // Check if this is a group or 1-on-1 conversation
     const group = await GroupConversationModel.findById(convId).select('members').lean();
-    
+
     if (group) {
-      // Group conversation - check membership
       const isMember = group.members.some(m => m.userId.toString() === requesterId);
       if (!isMember) throw new UnauthorizedConversationError(requesterId, convId);
     } else {
-      // 1-on-1 conversation - check participant
       const conv = await ConversationModel.findById(convId).lean<IConversation>();
       if (!conv) throw new ConversationNotFoundError(convId);
 
@@ -200,10 +172,7 @@ export class ChatService {
     }
   }
 
-  // ── saveMessage ──────────────────────────────────────────────────────────────
-
   async saveMessage(data: { convId: string; senderId: string; content: string; contentType: string; mediaUrl?: string | null }): Promise<MessageDto> {
-    // Verify conversation exists and sender is a participant
     const conv = await ConversationModel.findById(data.convId).lean<IConversation>();
     if (!conv) throw new ConversationNotFoundError(data.convId);
 
@@ -224,7 +193,6 @@ export class ChatService {
       throw err;
     }
 
-    // Update MongoDB lastMessage (non-blocking — failure doesn't break delivery)
     ConversationModel.updateOne(
       { _id: new Types.ObjectId(data.convId) },
       {
@@ -238,7 +206,6 @@ export class ChatService {
       },
     ).catch(err => logger.warn(`[ChatService] lastMessage update failed: ${(err as Error).message}`));
 
-    // Bust conversation list cache for all participants
     const redis = getRedisService();
     conv.participantIds.forEach(id => {
       redis.invalidateProfile(convListKey(id.toString())).catch(() => null);
@@ -246,8 +213,6 @@ export class ChatService {
 
     return saved;
   }
-
-  // ── updateMessageStatus ──────────────────────────────────────────────────────
 
   async updateMessageStatus(convId: string, msgId: string, status: MessageStatus): Promise<void> {
     try {
@@ -258,10 +223,7 @@ export class ChatService {
     }
   }
 
-  // ── saveToOfflineQueue ───────────────────────────────────────────────────────
-
   async saveToOfflineQueue(userId: string, message: MessageDto): Promise<void> {
-    // Build a minimal CassandraMessage-compatible object for the queue
     const { types } = await import('cassandra-driver');
 
     try {
@@ -286,8 +248,6 @@ export class ChatService {
     }
   }
 
-  // ── getAndFlushOfflineQueue ──────────────────────────────────────────────────
-
   async getAndFlushOfflineQueue(userId: string): Promise<MessageDto[]> {
     let queued;
     try {
@@ -305,7 +265,6 @@ export class ChatService {
         messages.push(msg);
         await this.repo.deleteFromOfflineQueue(userId, item.msgId);
       } catch {
-        // Malformed payload — delete to avoid re-delivery loop
         await this.repo.deleteFromOfflineQueue(userId, item.msgId).catch(() => null);
       }
     }

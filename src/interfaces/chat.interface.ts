@@ -1,7 +1,5 @@
 import type { ContentType } from './message.interface';
 
-// ─── Conversation response shape ──────────────────────────────────────────────
-
 export interface ParticipantProfile {
   _id: string;
   displayName: string;
@@ -24,14 +22,10 @@ export interface ConversationDto {
   updatedAt: Date;
 }
 
-// ─── Paginated conversations ──────────────────────────────────────────────────
-
 export interface PagedConversations {
   conversations: ConversationDto[];
-  nextCursor: string | null; // last _id for cursor pagination
+  nextCursor: string | null;
 }
-
-// ─── Service input types ──────────────────────────────────────────────────────
 
 export interface CreateConversationInput {
   requesterId: string;
@@ -58,8 +52,6 @@ export interface GetConversationsInput {
   limit?: number;
   lastConvId?: string;
 }
-
-// ─── Group Conversation Types ─────────────────────────────────────────────────
 
 export type GroupMemberRole = 'admin' | 'member';
 
@@ -174,5 +166,4 @@ export interface PagedGroups {
   nextCursor: string | null;
 }
 
-// Import Types for ObjectId reference
 import type { Types } from 'mongoose';

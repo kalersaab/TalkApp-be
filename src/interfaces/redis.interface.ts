@@ -1,21 +1,15 @@
-// ─── Presence ─────────────────────────────────────────────────────────────────
-
 export interface SocketInfo {
-  wsNodeId: string; // identifies which server process owns the socket
-  socketId: string; // the individual socket/connection id
+  wsNodeId: string;
+  socketId: string;
 }
 
 export type UserStatus = 'online' | 'offline';
 
-// ─── Rate limit result ────────────────────────────────────────────────────────
-
 export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
-  resetAt: number; // unix timestamp (ms) when the window resets
+  resetAt: number;
 }
-
-// ─── Cache payloads — kept generic so callers own the shape ──────────────────
 
 export type ProfileData = Record<string, unknown>;
 export type InventoryData = Record<string, unknown>;
@@ -23,10 +17,8 @@ export type InventoryData = Record<string, unknown>;
 export interface StreakData {
   currentStreak: number;
   longestStreak: number;
-  lastActiveDate: string; // ISO string — safe to serialise
+  lastActiveDate: string;
 }
-
-// ─── Pub/Sub message envelopes ────────────────────────────────────────────────
 
 export interface ConvMessagePayload {
   msgId: string;
@@ -35,7 +27,7 @@ export interface ConvMessagePayload {
   content: string;
   contentType: string;
   createdAt: string;
-  [key: string]: unknown; // allow extra fields without breaking the type
+  [key: string]: unknown;
 }
 
 export interface PresencePayload {
@@ -43,8 +35,6 @@ export interface PresencePayload {
   status: UserStatus;
   timestamp: string;
 }
-
-// ─── Typed error ──────────────────────────────────────────────────────────────
 
 export class RedisError extends Error {
   constructor(public readonly operation: string, public readonly cause: unknown) {

@@ -18,9 +18,8 @@ const deviceTokenSchema = new Schema<IDeviceToken>(
   { timestamps: { createdAt: false, updatedAt: true } },
 );
 
-// One token per user per platform — upsert on this index
 deviceTokenSchema.index({ userId: 1, platform: 1 }, { unique: true });
-// Lookup by raw token (for invalid-token cleanup)
+
 deviceTokenSchema.index({ token: 1 });
 
 export const DeviceTokenModel = model<IDeviceToken>('DeviceToken', deviceTokenSchema);

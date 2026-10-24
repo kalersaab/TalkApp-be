@@ -21,12 +21,8 @@ import type {
 import type { IUser, IAchievement, IInventory, IPost, IFollow } from '@interfaces/users.interface';
 import { logger } from '@utils/logger';
 
-// ─── Cache TTL ────────────────────────────────────────────────────────────────
-
-const PROFILE_TTL = 5 * 60; // 5 minutes
+const PROFILE_TTL = 5 * 60;
 const profileCacheKey = (userId: string) => `profile:full:${userId}`;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toAchievementDTO(a: IAchievement): AchievementDTO {
   return {
@@ -74,25 +70,15 @@ function toBasicUserDTO(user: IUser): BasicUserDTO {
   };
 }
 
-// ─── ProfileService ───────────────────────────────────────────────────────────
-
 export class ProfileService {
-  // ── completeProfile ──────────────────────────────────────────────────────────
-
-  /**
-   * Complete profile for new Google Sign-In users
-   * Updates the minimally-created user with full profile information
-   */
   async completeProfile(userId: string, profileData: import('@dtos/profile.dto').CompleteProfileDto): Promise<ProfileDTO> {
     const { username, gender, dateOfBirth, nativeLang, learningLangs, proficiencyLevels, bio, location } = profileData;
 
-    // Check if username is already taken
     const existingUser = await UserModel.findOne({ username: username.toLowerCase() }).lean();
     if (existingUser && existingUser._id.toString() !== userId) {
       throw new HttpException(409, 'Username already taken');
     }
 
-    // Validate learning languages
     if (learningLangs.length === 0) {
       throw new HttpException(400, 'At least one learning language is required');
     }
@@ -101,7 +87,6 @@ export class ProfileService {
       throw new HttpException(400, 'Maximum 5 learning languages allowed');
     }
 
-    // Update user with profile data
     const updateData: Partial<IUser> = {
       username: username.toLowerCase(),
       nativeLang,
@@ -115,53 +100,40 @@ export class ProfileService {
     if (location && location.length === 2) {
       updateData.location = {
         type: 'Point',
-        coordinates: location, // [longitude, latitude]
+        coordinates: location,
       };
     }
 
-    const user = await UserModel.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { new: true }
-    ).lean();
+    const user = await UserModel.findByIdAndUpdate(userId, { $set: updateData }, { new: true }).lean();
 
     if (!user) {
       throw new HttpException(404, 'User not found');
     }
 
-    // Invalidate profile cache
     const redis = getRedisService();
     await redis.invalidateProfile(userId);
 
     logger.info(`[Profile] Profile completed for user ${userId}`);
 
-    // Return the complete profile
     return this.getProfile(userId, userId);
   }
 
-  // ── getProfile ───────────────────────────────────────────────────────────────
-
   async getProfile(targetUserId: string, requesterId: string): Promise<ProfileDTO> {
-    // Try Redis cache first
     const redis = getRedisService();
     const cacheKey = profileCacheKey(targetUserId);
 
     try {
       const cached = await redis.getProfile(cacheKey);
       if (cached) {
-        // Inject live isFollowing — this is requester-specific so we don't cache it
         const dto = cached as unknown as ProfileDTO;
         dto.isFollowing = await this.isFollowing(requesterId, targetUserId);
         return dto;
       }
-    } catch {
-      // Cache miss — continue to DB
-    }
+    } catch {}
 
     const user = await UserModel.findById(targetUserId).lean<IUser>();
     if (!user) throw new HttpException(404, 'User not found');
 
-    // Parallel fetch of related data
     const [achievements, inventory, isFollowing] = await Promise.all([
       AchievementModel.find({ userId: new Types.ObjectId(targetUserId) })
         .sort({ earnedAt: -1 })
@@ -201,15 +173,12 @@ export class ProfileService {
       lastSeen: user.lastSeen,
     };
 
-    // Cache without isFollowing (requester-specific)
     const cacheable = { ...dto, isFollowing: false };
     redis.cacheProfile(cacheKey, cacheable as unknown as Record<string, unknown>, PROFILE_TTL).catch(() => null);
 
     dto.isFollowing = isFollowing;
     return dto;
   }
-
-  // ── updateProfile ────────────────────────────────────────────────────────────
 
   async updateProfile(
     userId: string,
@@ -244,15 +213,12 @@ export class ProfileService {
 
     await UserModel.updateOne({ _id: new Types.ObjectId(userId) }, { $set: allowedFields });
 
-    // Bust cache
     await getRedisService()
       .invalidateProfile(profileCacheKey(userId))
       .catch(() => null);
 
     return this.getProfile(userId, userId);
   }
-
-  // ── uploadAvatar ─────────────────────────────────────────────────────────────
 
   async uploadAvatar(userId: string, fileBuffer: Buffer, mimeType: string): Promise<string> {
     const ext = mimeType.split('/')[1] ?? 'jpg';
@@ -269,8 +235,6 @@ export class ProfileService {
     return url;
   }
 
-  // ── getProfilePosts ──────────────────────────────────────────────────────────
-
   async getProfilePosts(targetUserId: string, requesterId: string, limit = 20, lastPostId?: string): Promise<PagedPosts> {
     const query: Record<string, unknown> = {
       userId: new Types.ObjectId(targetUserId),
@@ -286,8 +250,6 @@ export class ProfileService {
       nextCursor: posts.length === limit ? posts[posts.length - 1]._id.toString() : null,
     };
   }
-
-  // ── getFollowers ─────────────────────────────────────────────────────────────
 
   async getFollowers(targetUserId: string, limit = 20, lastUserId?: string): Promise<PagedUsers> {
     const query: Record<string, unknown> = {
@@ -313,8 +275,6 @@ export class ProfileService {
     };
   }
 
-  // ── getFollowing ─────────────────────────────────────────────────────────────
-
   async getFollowing(targetUserId: string, limit = 20, lastUserId?: string): Promise<PagedUsers> {
     const query: Record<string, unknown> = {
       followerId: new Types.ObjectId(targetUserId),
@@ -339,8 +299,6 @@ export class ProfileService {
     };
   }
 
-  // ── getAchievements ──────────────────────────────────────────────────────────
-
   async getAchievements(
     targetUserId: string,
     limit = 20,
@@ -361,8 +319,6 @@ export class ProfileService {
     };
   }
 
-  // ── follow ────────────────────────────────────────────────────────────────────
-
   async follow(followerId: string, followingId: string): Promise<FollowResult> {
     if (followerId === followingId) {
       throw new HttpException(400, 'Cannot follow yourself');
@@ -371,7 +327,6 @@ export class ProfileService {
     const target = await UserModel.findById(followingId).lean();
     if (!target) throw new HttpException(404, 'User not found');
 
-    // Check if reverse follow exists (they follow us)
     const reverseExists = await FollowModel.exists({
       followerId: new Types.ObjectId(followingId),
       followingId: new Types.ObjectId(followerId),
@@ -379,7 +334,6 @@ export class ProfileService {
 
     const isMutual = !!reverseExists;
 
-    // Upsert the follow record
     await FollowModel.findOneAndUpdate(
       {
         followerId: new Types.ObjectId(followerId),
@@ -389,7 +343,6 @@ export class ProfileService {
       { upsert: true },
     );
 
-    // If mutual, update the reverse record too
     if (isMutual) {
       await FollowModel.updateOne(
         {
@@ -400,13 +353,11 @@ export class ProfileService {
       );
     }
 
-    // Update denormalised counts atomically
     await Promise.all([
       UserModel.updateOne({ _id: new Types.ObjectId(followerId) }, { $inc: { followingCount: 1 } }),
       UserModel.updateOne({ _id: new Types.ObjectId(followingId) }, { $inc: { followersCount: 1 } }),
     ]);
 
-    // Bust both profile caches
     const redis = getRedisService();
     await Promise.all([
       redis.invalidateProfile(profileCacheKey(followerId)).catch(() => null),
@@ -415,8 +366,6 @@ export class ProfileService {
 
     return { following: true, mutual: isMutual };
   }
-
-  // ── unfollow ──────────────────────────────────────────────────────────────────
 
   async unfollow(followerId: string, followingId: string): Promise<FollowResult> {
     if (followerId === followingId) {
@@ -430,7 +379,6 @@ export class ProfileService {
 
     if (!deleted) return { following: false, mutual: false };
 
-    // Clear mutual flag on reverse record
     await FollowModel.updateOne(
       {
         followerId: new Types.ObjectId(followingId),
@@ -439,7 +387,6 @@ export class ProfileService {
       { $set: { isMutual: false } },
     );
 
-    // Update denormalised counts
     await Promise.all([
       UserModel.updateOne({ _id: new Types.ObjectId(followerId) }, { $inc: { followingCount: -1 } }),
       UserModel.updateOne({ _id: new Types.ObjectId(followingId) }, { $inc: { followersCount: -1 } }),
@@ -453,8 +400,6 @@ export class ProfileService {
 
     return { following: false, mutual: false };
   }
-
-  // ── likePost / unlikePost ─────────────────────────────────────────────────────
 
   async likePost(userId: string, postId: string): Promise<{ likeCount: number }> {
     const post = await PostModel.findByIdAndUpdate(
@@ -477,8 +422,6 @@ export class ProfileService {
     if (!post) throw new HttpException(404, 'Post not found');
     return { likeCount: Math.max(0, post.likeCount) };
   }
-
-  // ── Private helpers ───────────────────────────────────────────────────────────
 
   private async isFollowing(followerId: string, followingId: string): Promise<boolean> {
     if (followerId === followingId) return false;

@@ -2,7 +2,7 @@ import multer from 'multer';
 import { HttpException } from '@exceptions/HttpException';
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 export const avatarUpload = multer({
   storage: multer.memoryStorage(),

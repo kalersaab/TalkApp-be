@@ -1,8 +1,6 @@
 import type { ItemType } from '@interfaces/users.interface';
 import type { CatalogueItem } from '@constants/itemsCatalogue';
 
-// ─── Inventory response ───────────────────────────────────────────────────────
-
 export interface OwnedItem {
   itemId: string;
   itemType: ItemType;
@@ -21,14 +19,10 @@ export interface InventoryResponse {
   };
 }
 
-// ─── Catalogue response ───────────────────────────────────────────────────────
-
 export interface CatalogueItemWithOwnership extends CatalogueItem {
   isOwned: boolean;
-  unlockedBy: string | null; // achievementType
+  unlockedBy: string | null;
 }
-
-// ─── Equip result ─────────────────────────────────────────────────────────────
 
 export interface EquipResult {
   equippedItems: {
@@ -38,9 +32,7 @@ export interface EquipResult {
   };
 }
 
-// ─── Sender equipped items (attached to chat messages) ───────────────────────
-
 export interface SenderEquipped {
-  chatBubble: string | null; // itemId
-  chatBackground: string | null; // itemId
+  chatBubble: string | null;
+  chatBackground: string | null;
 }

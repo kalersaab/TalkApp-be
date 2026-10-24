@@ -6,8 +6,6 @@ import type { CreateConversationDto, GetMessagesQueryDto, GetConversationsQueryD
 
 const svc = new ChatService();
 
-// ─── GET /api/chat/conversations ──────────────────────────────────────────────
-
 export const getConversations = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { lastConvId, limit } = req.query as GetConversationsQueryDto;
@@ -22,8 +20,6 @@ export const getConversations = async (req: RequestWithUser, res: Response, next
   }
 };
 
-// ─── POST /api/chat/conversations ─────────────────────────────────────────────
-
 export const createConversation = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { targetUserId } = req.body as CreateConversationDto;
@@ -36,8 +32,6 @@ export const createConversation = async (req: RequestWithUser, res: Response, ne
     next(err);
   }
 };
-
-// ─── GET /api/chat/conversations/:convId/messages ─────────────────────────────
 
 export const getMessages = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -56,8 +50,6 @@ export const getMessages = async (req: RequestWithUser, res: Response, next: Nex
     next(err);
   }
 };
-
-// ─── DELETE /api/chat/conversations/:convId ───────────────────────────────────
 
 export const deleteConversation = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {

@@ -5,14 +5,6 @@ import type { RequestWithUser } from '@interfaces/auth.interface';
 import { UserModel } from '@models/users.model';
 import { verifyAccessToken } from '@utils/jwt';
 
-/**
- * Extracts the Bearer token from the Authorization header,
- * verifies the RS256 signature, and attaches the full user
- * document to req.user.
- *
- * Returns 401 for missing, expired, or invalid tokens.
- * Returns 401 if the user no longer exists or is inactive.
- */
 export const AuthMiddleware = async (req: RequestWithUser, _res: Response, next: NextFunction): Promise<void> => {
   try {
     const header = req.headers.authorization;
@@ -21,7 +13,7 @@ export const AuthMiddleware = async (req: RequestWithUser, _res: Response, next:
     }
 
     const token = header.slice(7);
-    const payload = verifyAccessToken(token); // throws HttpException on failure
+    const payload = verifyAccessToken(token);
 
     const user = await UserModel.findById(payload.userId, '-passwordHash').lean();
     if (!user) return next(new HttpException(401, 'User not found'));

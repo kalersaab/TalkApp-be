@@ -9,7 +9,7 @@ function getS3Client(): S3Client {
     s3 = new S3Client({
       region: AWS_REGION ?? 'us-east-1',
       credentials:
-        AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY ? { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY } : undefined, // falls back to IAM role in production
+        AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY ? { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY } : undefined,
     });
   }
   return s3;

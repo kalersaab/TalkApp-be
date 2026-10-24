@@ -17,8 +17,6 @@ import { Type } from 'class-transformer';
 import { isValidLanguageCode } from '@utils/languageCodes';
 import { registerDecorator, type ValidationOptions } from 'class-validator';
 
-// ─── Custom decorator: validates each element is a valid ISO 639-1 code ───────
-
 function IsISO6391Array(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
@@ -39,8 +37,6 @@ function IsISO6391Array(validationOptions?: ValidationOptions) {
   };
 }
 
-// ─── Nested DTO ───────────────────────────────────────────────────────────────
-
 class AgeRangeDto {
   @IsInt()
   @Min(18, { message: 'Minimum age must be at least 18' })
@@ -50,8 +46,6 @@ class AgeRangeDto {
   @Max(100, { message: 'Maximum age must not exceed 100' })
   public max: number;
 }
-
-// ─── Main filter DTO ──────────────────────────────────────────────────────────
 
 export class FindPartnersDto {
   @IsIn(['male', 'female', 'any'], { message: "genderPreference must be 'male', 'female', or 'any'" })

@@ -19,18 +19,14 @@ import { getOTPService } from '@services/otp.service';
 import sendEmail from '@services/sendEmail.service';
 import { renderEmail } from '@/template/email/renderTemplate';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const REFRESH_COOKIE = 'refreshToken';
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'strict' as const,
-  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in ms
+  maxAge: 30 * 24 * 60 * 60 * 1000,
   path: '/',
 };
-
-// ─── OAuth2 Clients (Lazy initialized) ────────────────────────────────────────
 
 let googleClient: OAuth2Client | null = null;
 let appleJwks: ReturnType<typeof jwksClientLib> | null = null;
@@ -50,63 +46,38 @@ function getAppleJwks(): ReturnType<typeof jwksClientLib> {
       jwksUri: 'https://appleid.apple.com/auth/keys',
       cache: true,
       cacheMaxEntries: 5,
-      cacheMaxAge: 10 * 60 * 1000, // 10 min
+      cacheMaxAge: 10 * 60 * 1000,
     });
   }
   return appleJwks;
 }
 
-// ─── Certificate Pre-warming (Call on server startup) ─────────────────────────
-
-/**
- * 🚀 PERFORMANCE OPTIMIZATION: Pre-warm Google OAuth certificates
- * Call this during server startup to cache Google's public certificates in memory.
- * This saves 20-50ms on the first OAuth verification by eliminating the cert fetch.
- */
 export const bootstrapGoogleAuth = async (): Promise<void> => {
   try {
     const client = getGoogleClient();
 
-    // Pre-fetch Google's public certificates and cache them in memory
-    // This prevents the first OAuth call from having to fetch certs over the network
     await client.getFederatedSignonCertsAsync();
 
     logger.info('[Auth] Google OAuth certificates pre-cached successfully');
   } catch (err) {
     logger.warn(`[Auth] Failed to pre-cache Google certificates: ${(err as Error).message}`);
-    // Non-fatal error - first OAuth call will just fetch certs normally
   }
 };
 
-/**
- * 🚀 PERFORMANCE OPTIMIZATION: Pre-warm Apple OAuth certificates
- * Call this during server startup to cache Apple's JWKS keys in memory.
- * This saves 10-30ms on the first Apple OAuth verification.
- */
 export const bootstrapAppleAuth = async (): Promise<void> => {
   try {
     getAppleJwks();
 
-    // Pre-warm the JWKS client cache by triggering key retrieval
-    // The client will automatically cache Apple's current signing keys
-    // We'll let it fail gracefully if no keys are available yet
     logger.info('[Auth] Apple OAuth JWKS client initialized (keys will be cached on first use)');
   } catch (err) {
     logger.warn(`[Auth] Failed to initialize Apple JWKS client: ${(err as Error).message}`);
-    // Non-fatal error - first OAuth call will just fetch certs normally
   }
 };
 
-/**
- * 🚀 PERFORMANCE OPTIMIZATION: Bootstrap all OAuth providers
- * Call this once during server startup to pre-warm all certificate caches.
- */
 export const bootstrapAuthProviders = async (): Promise<void> => {
   await Promise.allSettled([bootstrapGoogleAuth(), bootstrapAppleAuth()]);
   logger.info('[Auth] OAuth provider bootstrap completed');
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function sanitizeUser(user: IUser): Omit<IUser, 'passwordHash'> {
   const obj = user.toJSON() as Record<string, unknown>;
@@ -132,8 +103,6 @@ async function createUserDocuments(userId: string): Promise<void> {
   ]);
 }
 
-// ─── AuthService ──────────────────────────────────────────────────────────────
-
 export class AuthService {
   private redis = getRedisService();
   private otp = getOTPService();
@@ -147,7 +116,6 @@ export class AuthService {
       Promise.resolve(hashToken(rawRefreshToken.trim())),
     ]);
 
-    // Store with already-computed hash
     await this.redis.setRefreshTokenSession(tokenHash, {
       userId,
       family: tokenFamily,
@@ -156,10 +124,6 @@ export class AuthService {
 
     return { accessToken, refreshToken: rawRefreshToken };
   }
-
-  // ── register ────────────────────────────────────────────────────────────────
-
-  // ── login ────────────────────────────────────────────────────────────────────
 
   public async login(userData: LoginUser): Promise<AuthResult> {
     const { email, password } = userData;
@@ -197,20 +161,9 @@ export class AuthService {
     return { accessToken, refreshToken, user: sanitizeUser(findUser) };
   }
 
-  // ── me ───────────────────────────────────────────────────────────────────────
-
-  //  public async getMe(
-  //   user: Record<string, unknown>,
-  // ): Promise<Record<string, unknown>> {
-  //   return user;
-  // }
-
-  // ── google ───────────────────────────────────────────────────────────────────
-
   public async googleAuth(idToken: string): Promise<OAuthResult> {
     if (!idToken) throw new HttpException(400, 'ID Token is required');
 
-    // 🚀 OPTIMIZATION 1: Check token cache first
     const tokenHash = hashToken(idToken);
     const cachedPayload = await this.redis.getDataClient().get(`google_token:${tokenHash}`);
 
@@ -218,15 +171,12 @@ export class AuthService {
     let existingUser: any = null;
 
     if (cachedPayload) {
-      // Use cached verified payload (saves 150-180ms!)
       payload = JSON.parse(cachedPayload) as GoogleTokenPayload;
 
-      // Still need to fetch user from DB
       existingUser = await UserModel.findOne({
         $or: [{ googleId: payload.sub }, { email: payload.email.toLowerCase() }],
       }).exec();
     } else {
-      // 🚀 OPTIMIZATION 2: Extract email WITHOUT verification first, then parallel
       let unverifiedPayload: any;
       try {
         unverifiedPayload = jwt.decode(idToken) as any;
@@ -239,7 +189,6 @@ export class AuthService {
       const targetEmail = unverifiedPayload.email.toLowerCase();
       const googleId = unverifiedPayload.sub;
 
-      // 🚀 OPTIMIZATION 3: Run Google verification and DB query in PARALLEL
       const [ticket, userFromDB] = await Promise.all([
         (async () => {
           try {
@@ -259,12 +208,7 @@ export class AuthService {
 
       if (!payload?.email) throw new HttpException(401, 'Google token missing email');
 
-      // Cache the verified payload for 5 minutes
-      await this.redis.getDataClient().setex(
-        `google_token:${tokenHash}`,
-        20 * 60, // 20 minutes
-        JSON.stringify(payload),
-      );
+      await this.redis.getDataClient().setex(`google_token:${tokenHash}`, 20 * 60, JSON.stringify(payload));
     }
 
     const targetEmail = payload.email.toLowerCase();
@@ -275,7 +219,6 @@ export class AuthService {
     let user: any;
 
     if (!existingUser) {
-      // ---- NEW USER - Optimized creation ----
       const displayName = payload.name ?? targetEmail.split('@')[0];
       const nameParts = displayName.trim().split(' ');
       const baseUsername = (nameParts.length > 1 ? nameParts[0] : nameParts[0]).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -297,12 +240,10 @@ export class AuthService {
       user = newUser;
       isNewUser = true;
 
-      // Background tasks (non-blocking)
       createUserDocuments(newUser._id.toString()).catch(err => {
         logger.error(`[Auth] Failed to create docs: ${(err as Error).message}`);
       });
     } else {
-      // ---- EXISTING USER ----
       const updates: Record<string, any> = {};
 
       if (!existingUser.googleId) {
@@ -313,7 +254,6 @@ export class AuthService {
         updates.isVerified = true;
       }
 
-      // Only update if needed
       if (Object.keys(updates).length > 0) {
         user = await UserModel.findByIdAndUpdate(existingUser._id, { $set: updates }, { new: true });
       } else {
@@ -321,7 +261,6 @@ export class AuthService {
       }
     }
 
-    // 🚀 OPTIMIZATION 4: Issue tokens
     const { accessToken, refreshToken } = await this.issueTokenPair(user._id.toString(), user.email);
 
     logger.info(`[Auth] Google auth ${user._id} (new=${isNewUser}) (cached=${!!cachedPayload})`);
@@ -332,8 +271,6 @@ export class AuthService {
       isNewUser,
     };
   }
-
-  // ── apple ────────────────────────────────────────────────────────────────────
 
   public async appleAuth(identityToken: string): Promise<OAuthResult> {
     let payload: AppleTokenPayload;
@@ -371,7 +308,6 @@ export class AuthService {
     let user: any;
 
     if (!existingUser) {
-      // New user: create with all required fields
       const displayName = lowerEmail.split('@')[0];
       const nameParts = displayName.trim().split(' ');
       const baseUsername = (nameParts.length > 1 ? nameParts[0] : nameParts[0].slice(0, 5)).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -396,12 +332,10 @@ export class AuthService {
       user = newUser;
       isNewUser = true;
 
-      // Background
       createUserDocuments(newUser._id.toString()).catch(err => {
         logger.error(`[Auth] Failed to create docs: ${(err as Error).message}`);
       });
     } else {
-      // Existing user - conditional update
       const updateData: Record<string, any> = {};
 
       if (!existingUser.appleId) {
@@ -440,17 +374,12 @@ export class AuthService {
     };
   }
 
-  // ── refresh ──────────────────────────────────────────────────────────────────
-
   public async refresh(rawToken: string): Promise<{
     accessToken: string;
     refreshToken: string;
   }> {
     const tokenHash = hashToken(rawToken.trim());
 
-    // Atomic operation:
-    // First request gets the token.
-    // Second request gets null.
     const session = await this.redis.consumeRefreshTokenSession(tokenHash);
 
     if (!session) {
@@ -470,20 +399,11 @@ export class AuthService {
     return this.issueTokenPair(user._id.toString(), user.email, session.family);
   }
 
-  // ── logout ───────────────────────────────────────────────────────────────────
-
   public async logout(rawToken: string): Promise<void> {
     const tokenHash = hashToken(rawToken.trim());
     await this.redis.invalidateRefreshTokenSession(tokenHash);
   }
 
-  // ── signin with email ────────────────────────────────────────────────────────
-
-  /**
-   * Email-only sign-in endpoint
-   * For new users: Returns isNewUser: true with email
-   * For existing users: Returns tokens with isNewUser: false
-   */
   public async signInWithEmail(email: string): Promise<OAuthResult | { isNewUser: boolean; email: string; message: string }> {
     if (!email) throw new HttpException(400, 'Email is required');
 
@@ -491,7 +411,6 @@ export class AuthService {
     const existingUser = await UserModel.findOne({ email: lowerEmail }).lean().exec();
 
     if (!existingUser) {
-      // New user: Return indicator to proceed with profile creation
       logger.info(`[Auth] New user sign-in attempt with email ${lowerEmail}`);
       return {
         isNewUser: true,
@@ -500,7 +419,6 @@ export class AuthService {
       };
     }
 
-    // Existing user: Generate tokens
     const { accessToken, refreshToken } = await this.issueTokenPair(existingUser._id.toString(), existingUser.email);
 
     logger.info(`[Auth] User signed in with email ${existingUser._id}`);
@@ -512,17 +430,12 @@ export class AuthService {
     };
   }
 
-  // ── verify email token ───────────────────────────────────────────────────────
-
-  /**
-   * Verify email token and complete profile creation for new users
-   * Token contains: userId (for new user), email
-   */
-  public async verifyEmailToken(token: string): Promise<{ user: Omit<IUser, 'passwordHash'>; accessToken: string; refreshToken: string; isNewUser: boolean }> {
+  public async verifyEmailToken(
+    token: string,
+  ): Promise<{ user: Omit<IUser, 'passwordHash'>; accessToken: string; refreshToken: string; isNewUser: boolean }> {
     if (!token) throw new HttpException(400, 'Token is required');
 
     try {
-      // Verify and decode the token (using same secret as JWT tokens)
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
 
       const { email, userId, isNew } = decoded;
@@ -531,7 +444,6 @@ export class AuthService {
 
       const lowerEmail = email.toLowerCase();
 
-      // For new users: create minimal user account
       if (isNew) {
         const baseUsername = lowerEmail.split('@')[0].slice(0, 10);
         const username = `ta@${baseUsername}${Math.floor(10000 + Math.random() * 90000)}`;
@@ -550,7 +462,6 @@ export class AuthService {
           location: { type: 'Point', coordinates: [0, 0] },
         });
 
-        // Create associated documents
         createUserDocuments(newUser._id.toString()).catch(err => {
           logger.error(`[Auth] Failed to create docs: ${(err as Error).message}`);
         });
@@ -566,7 +477,6 @@ export class AuthService {
         };
       }
 
-      // For existing users: verify they exist and issue tokens
       const user = await UserModel.findOne({ email: lowerEmail }).lean().exec();
 
       if (!user) {
@@ -596,8 +506,6 @@ export class AuthService {
     }
   }
 
-  // ── forgot password ──────────────────────────────────────────────────────────
-
   public async forgotPassword(email: string): Promise<{ message: string }> {
     const lowerEmail = email.toLowerCase();
 
@@ -622,7 +530,6 @@ export class AuthService {
     try {
       const otp = await this.otp.generateAndStoreOTP(email);
 
-      // Render template
       const emailHtml = renderEmail({
         templatePath: 'src/template/passwordReset.hbs',
         data: {
@@ -635,7 +542,6 @@ export class AuthService {
         },
       });
 
-      // Send email
       await sendEmail([email], 'Password Reset OTP - TalkApp', emailHtml, []);
 
       logger.info(`[Auth] Password reset OTP sent to ${email}`);
@@ -645,8 +551,6 @@ export class AuthService {
     }
   }
 
-  // ── reset password ───────────────────────────────────────────────────────────
-
   public async resetPassword(email: string, otp: string, newPassword: string): Promise<{ message: string }> {
     const lowerEmail = email.toLowerCase();
 
@@ -655,7 +559,6 @@ export class AuthService {
     }
 
     try {
-      // 🚀 OPTIMIZATION 1: Verify OTP + Find user in PARALLEL
       const [isValid, user] = await Promise.all([
         this.otp.verifyOTP(lowerEmail, otp),
         UserModel.findOne({ email: lowerEmail }, { _id: 1 }).lean().exec(),
@@ -671,27 +574,20 @@ export class AuthService {
 
       const userId = user._id.toString();
 
-      // 🚀 OPTIMIZATION 2: Hash password in background + do DB update immediately
       const hashedPasswordPromise = argon2.hash(newPassword, {
         type: argon2.argon2id,
         memoryCost: 16384,
         timeCost: 2,
       });
 
-      // 🚀 OPTIMIZATION 3: Invalidate user tokens more efficiently
-      // Store invalidation list (user-specific tokens) in Redis
-      // This is much faster than scanning all tokens
       const invalidateUserTokensPromise = this.redis.invalidateUserRefreshTokens(userId);
 
-      // 🚀 OPTIMIZATION 4: Wait for password hash + DO DB update + invalidate tokens in PARALLEL
       const [hashedPassword] = await Promise.all([hashedPasswordPromise, invalidateUserTokensPromise]);
 
-      // Update password immediately
       await UserModel.updateOne({ _id: user._id }, { $set: { passwordHash: hashedPassword } });
 
       logger.info(`[Auth] Password reset successfully for ${lowerEmail}`);
 
-      // Return response immediately (rest continues in background if any)
       return {
         message: 'Password reset successfully. Please login with your new password',
       };
@@ -700,8 +596,6 @@ export class AuthService {
       throw new HttpException(500, 'Password reset failed. Please try again.');
     }
   }
-
-  // ── cookie helpers (used by controller) ──────────────────────────────────────
 
   static cookieOptions() {
     return COOKIE_OPTIONS;

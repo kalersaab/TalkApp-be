@@ -1,48 +1,36 @@
 import { Schema, model, Types } from 'mongoose';
 
-// ─── Extended Profile Model ───────────────────────────────────────────────────
-
 export interface IUserProfile {
   userId: Types.ObjectId;
 
- 
-
-  // Interests & Hobbies (max 8)
   interests: string[];
   hobbies: string[];
 
-  // Places & Location
-  placesToGo: string[]; // Places they want to visit
-  hometown: string | null; // Where they live
+  placesToGo: string[];
+  hometown: string | null;
   currentLocation: {
     city: string | null;
     country: string | null;
-    showInProfile: boolean; // Privacy setting
+    showInProfile: boolean;
   };
 
-  // Professional
-  occupation: string[]; // Max 3 options
+  occupation: string[];
 
- 
   birthday: Date | null;
-  zodiacSign: string | null; // Auto-calculated from birthday
+  zodiacSign: string | null;
 
-  // Psychology
-  mbtiType: string | null; // 16 personality types
+  mbtiType: string | null;
 
-  // Privacy & Display
   showRegionInProfile: boolean;
 
-  // Profile Pictures (max 4)
   profilePictures: {
     url: string;
     isPrimary: boolean;
     uploadedAt: Date;
   }[];
 
-  // Metadata
-  isComplete: boolean; // Auto-calculated based on filled fields
-  completionPercentage: number; // 0-100
+  isComplete: boolean;
+  completionPercentage: number;
   lastUpdatedAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -57,7 +45,7 @@ const userProfileSchema = new Schema<IUserProfile>(
       unique: true,
       index: true,
     },
- // Interests & Hobbies
+
     interests: {
       type: [String],
       default: [],
@@ -66,7 +54,7 @@ const userProfileSchema = new Schema<IUserProfile>(
         message: 'Maximum 8 interests allowed',
       },
     },
-    // Places & Location
+
     placesToGo: {
       type: [String],
       default: [],
@@ -85,7 +73,6 @@ const userProfileSchema = new Schema<IUserProfile>(
       showInProfile: { type: Boolean, default: true },
     },
 
-    // Professional
     occupation: {
       type: [String],
       default: [],
@@ -95,14 +82,14 @@ const userProfileSchema = new Schema<IUserProfile>(
       },
     },
 
-   birthday: {
+    birthday: {
       type: Date,
       validate: {
         validator: function (v: Date) {
           if (!v) return true;
           const today = new Date();
           const age = today.getFullYear() - v.getFullYear();
-          return age >= 13 && age <= 120; // Age validation
+          return age >= 13 && age <= 120;
         },
         message: 'Birthday must indicate age between 13 and 120',
       },
@@ -112,19 +99,16 @@ const userProfileSchema = new Schema<IUserProfile>(
       enum: ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo', 'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces'],
     },
 
-    // Psychology
     mbtiType: {
       type: String,
       enum: ['INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ', 'ENFP', 'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ', 'ISTP', 'ISFP', 'ESTP', 'ESFP'],
     },
 
-    // Privacy & Display
     showRegionInProfile: {
       type: Boolean,
       default: true,
     },
 
-    // Profile Pictures
     profilePictures: [
       {
         url: { type: String, required: true },
@@ -133,7 +117,6 @@ const userProfileSchema = new Schema<IUserProfile>(
       },
     ],
 
-    // Metadata
     isComplete: {
       type: Boolean,
       default: false,
@@ -156,28 +139,19 @@ const userProfileSchema = new Schema<IUserProfile>(
   },
 );
 
-
-
-// ─── Pre-save Hooks ───────────────────────────────────────────────────────────
-
 userProfileSchema.pre('save', function () {
-  // Auto-calculate zodiac sign from birthday
   if (this.birthday && !this.zodiacSign) {
     this.zodiacSign = calculateZodiacSign(this.birthday);
   }
 
-  // Update completion percentage
   this.completionPercentage = calculateCompletionPercentage(this);
-  this.isComplete = this.completionPercentage >= 80; // 80% threshold for complete
+  this.isComplete = this.completionPercentage >= 80;
 
-  // Update lastUpdatedAt
   this.lastUpdatedAt = new Date();
 });
 
-// ─── Helper Functions ─────────────────────────────────────────────────────────
-
 function calculateZodiacSign(birthday: Date): string {
-  const month = birthday.getMonth() + 1; // getMonth() is 0-indexed
+  const month = birthday.getMonth() + 1;
   const day = birthday.getDate();
 
   if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return 'aries';
@@ -191,20 +165,19 @@ function calculateZodiacSign(birthday: Date): string {
   if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return 'sagittarius';
   if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return 'capricorn';
   if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return 'aquarius';
-  return 'pisces'; // Feb 19 - Mar 20
+  return 'pisces';
 }
 
 function calculateCompletionPercentage(profile: any): number {
   let filledFields = 0;
-  const totalFields = 15; // Total important fields to track
+  const totalFields = 15;
 
-  
   if (profile.interests?.length > 0) filledFields++;
- 
+
   if (profile.placesToGo?.length > 0) filledFields++;
   if (profile.hometown) filledFields++;
   if (profile.occupation?.length > 0) filledFields++;
-  
+
   if (profile.birthday) filledFields++;
   if (profile.mbtiType) filledFields++;
   if (profile.profilePictures?.length > 0) filledFields++;
@@ -213,8 +186,6 @@ function calculateCompletionPercentage(profile: any): number {
 
   return Math.round((filledFields / totalFields) * 100);
 }
-
-// ─── Indexes ──────────────────────────────────────────────────────────────────
 
 userProfileSchema.index({ userId: 1 }, { unique: true });
 

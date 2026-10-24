@@ -23,13 +23,10 @@ export class ExtendedProfileController {
     this.service = new ExtendedProfileService();
   }
 
-  // Helper method to extract userId from request
   private getUserId(req: RequestWithUser): string | null {
     const userId = req.user?._id?.toString();
     return userId || null;
   }
-
-  // ─── GET /api/profile/extended ────────────────────────────────────────────────
 
   public getExtendedProfile = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -50,8 +47,6 @@ export class ExtendedProfileController {
       next(err);
     }
   };
-
-  // ─── PATCH /api/profile/basic ─────────────────────────────────────────────────
 
   public updateBasicInfo = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -74,8 +69,6 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── PATCH /api/profile/languages ────────────────────────────────────────────
-
   public updateLanguages = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = this.getUserId(req);
@@ -96,8 +89,6 @@ export class ExtendedProfileController {
       next(err);
     }
   };
-
-  // ─── PATCH /api/profile/interests ─────────────────────────────────────────────
 
   public updateInterests = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -120,8 +111,6 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── PATCH /api/profile/location ──────────────────────────────────────────────
-
   public updateLocation = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = this.getUserId(req);
@@ -142,8 +131,6 @@ export class ExtendedProfileController {
       next(err);
     }
   };
-
-  // ─── PATCH /api/profile/occupation ────────────────────────────────────────────
 
   public updateOccupation = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -166,8 +153,6 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── PATCH /api/profile/personal ──────────────────────────────────────────────
-
   public updatePersonalInfo = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = this.getUserId(req);
@@ -188,8 +173,6 @@ export class ExtendedProfileController {
       next(err);
     }
   };
-
-  // ─── PATCH /api/profile/psychology ────────────────────────────────────────────
 
   public updatePsychology = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -212,8 +195,6 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── PATCH /api/profile/username ──────────────────────────────────────────────
-
   public updateUsername = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = this.getUserId(req);
@@ -235,18 +216,11 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── GET /api/profile/username/check/:username ────────────────────────────────
-
-  public checkUsernameAvailability = async (
-    req: RequestWithUser,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
+  public checkUsernameAvailability = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { username } = req.params;
       const userId = this.getUserId(req);
 
-      // Validate username format
       const usernameRegex = /^[a-z0-9_]{3,20}$/;
       if (!usernameRegex.test(username)) {
         res.status(400).json({
@@ -256,7 +230,6 @@ export class ExtendedProfileController {
         return;
       }
 
-      // Check availability, excluding current user if authenticated
       const result = await this.service.checkUsernameAvailability(username, userId);
 
       res.status(200).json({
@@ -267,8 +240,6 @@ export class ExtendedProfileController {
       next(err);
     }
   };
-
-  // ─── POST /api/profile/pictures ───────────────────────────────────────────────
 
   public uploadProfilePicture = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -291,8 +262,6 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── PATCH /api/profile/pictures/primary ──────────────────────────────────────
-
   public setPrimaryPicture = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = this.getUserId(req);
@@ -313,8 +282,6 @@ export class ExtendedProfileController {
       next(err);
     }
   };
-
-  // ─── DELETE /api/profile/pictures ─────────────────────────────────────────────
 
   public deleteProfilePicture = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -337,8 +304,6 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── PATCH /api/profile/complete ──────────────────────────────────────────────
-
   public updateCompleteProfile = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = this.getUserId(req);
@@ -360,8 +325,6 @@ export class ExtendedProfileController {
     }
   };
 
-  // ─── GET /api/profile/completion ──────────────────────────────────────────────
-
   public getProfileCompletionStatus = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = this.getUserId(req);
@@ -382,4 +345,3 @@ export class ExtendedProfileController {
     }
   };
 }
-

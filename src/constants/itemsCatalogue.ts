@@ -1,20 +1,15 @@
 import type { ItemType } from '@interfaces/users.interface';
 
-// ─── Catalogue item shape ─────────────────────────────────────────────────────
-
 export interface CatalogueItem {
   id: string;
   name: string;
   type: ItemType;
   description: string;
-  unlockedByAchievement: string | null; // null = default item (everyone owns it)
+  unlockedByAchievement: string | null;
   previewImageUrl: string;
 }
 
-// ─── Full catalogue ───────────────────────────────────────────────────────────
-
 export const ITEMS_CATALOGUE: CatalogueItem[] = [
-  // ── Avatar Effects ──────────────────────────────────────────────────────────
   {
     id: 'default_none',
     name: 'No Effect',
@@ -56,7 +51,6 @@ export const ITEMS_CATALOGUE: CatalogueItem[] = [
     previewImageUrl: '/assets/items/avatar_effects/legend_aura.png',
   },
 
-  // ── Chat Bubbles ────────────────────────────────────────────────────────────
   {
     id: 'default_plain',
     name: 'Plain Bubble',
@@ -90,7 +84,6 @@ export const ITEMS_CATALOGUE: CatalogueItem[] = [
     previewImageUrl: '/assets/items/chat_bubbles/royal_bubble.png',
   },
 
-  // ── Chat Backgrounds ────────────────────────────────────────────────────────
   {
     id: 'default_white',
     name: 'White',
@@ -125,9 +118,6 @@ export const ITEMS_CATALOGUE: CatalogueItem[] = [
   },
 ];
 
-// ─── Lookup helpers ───────────────────────────────────────────────────────────
-
 export const CATALOGUE_MAP = new Map(ITEMS_CATALOGUE.map(i => [i.id, i]));
 
-/** IDs of items every user owns by default (no achievement required) */
 export const DEFAULT_ITEM_IDS = new Set(ITEMS_CATALOGUE.filter(i => i.unlockedByAchievement === null).map(i => i.id));
